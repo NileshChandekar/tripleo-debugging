@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <!--[if IE]><meta http-equiv="X-UA-Compatible" content="IE=edge"><![endif]-->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="generator" content="Asciidoctor 1.5.4">
+  <title>Tripleo/Director Debugging</title>
+  <link rel="stylesheet" href="https://asciidoclive.com/assets/asciidoctor.js/css/asciidoctor.css">
+</head>
+
+<body class="article">
+  <div id="header">
+    <h1>Tripleo/Director Debugging</h1>
+    <div id="toc" class="toc">
+      <div id="toctitle">Table of Contents</div>
+      <ul class="sectlevel1">
+        <li><a href="#_undercloud">Undercloud</a>
+          <ul class="sectlevel2">
+            <li><a href="#_undercloud_install_recommendations">Undercloud install recommendations</a></li>
+            <li><a href="#_undercloud_install_debug">Undercloud install Debug</a></li>
+          </ul>
+        </li>
+        <li><a href="#_introspection">Introspection</a>
+          <ul class="sectlevel2">
+            <li><a href="#_introspection_recomendations">Introspection Recomendations</a></li>
+            <li><a href="#_introspection_debug">Introspection Debug</a></li>
+          </ul>
+        </li>
+        <li><a href="#_deploy">Deploy</a>
+          <ul class="sectlevel2">
+            <li><a href="#_deploy_recommendations">Deploy recommendations</a></li>
+            <li><a href="#_deploy_debug">Deploy Debug</a></li>
+          </ul>
+        </li>
+        <li><a href="#_overcloud_deploy">Overcloud Deploy</a>
+          <ul class="sectlevel2">
+            <li><a href="#_mistral_plans_debug">Mistral Plans Debug</a></li>
+            <li><a href="#_overcloud_deploy_debug">Overcloud Deploy Debug</a></li>
+          </ul>
+        </li>
+      </ul>
+    </div>
+  </div>
+  <div id="content">
+    <div class="sect1">
+      <h2 id="_undercloud">Undercloud</h2>
+      <div class="sectionbody">
+        <hr>
+        <div class="sect2">
+          <h3 id="_undercloud_install_recommendations">Undercloud install recommendations</h3>
+          <div class="ulist">
+            <ul>
+              <li>
+                <p><strong>Undercloud recommended specs</strong></p>
+                <div class="ulist">
+                  <ul>
+                    <li>
+                      <p>CPUs: 2x Physical cores, 24 threads</p>
+                    </li>
+                    <li>
+                      <p>Disk: (single ssd or 2x drives 7200RPM) Root disk / raid1 Disk
+                        for swift</p>
+                    </li>
+                    <li>
+                      <p>Memory: 64G</p>
+                    </li>
+                    <li>
+                      <p>Network : 10G for provisioning</p>
+                    </li>
+                  </ul>
+                </div>
+              </li>
+              <li>
+                <p><strong>undercloud.conf recommended options:</strong></p>
+              </li>
+            </ul>
+          </div>
+          <div class="listingblock">
+            <div class="content">
+              <pre>undercloud_debug = false  --&gt;  only enable debug if needed
+enable_telemetry = false  --&gt;  disable telemetry
+automated_clean = true    --&gt; (is osp11 as clean_nodes=true) runs wipefs --force --all before making node available</pre>
+            </div>
+          </div>
+          <div class="ulist">
+            <ul>
+              <li>
+                <p><strong>Undercloud tunning:</strong></p>
+              </li>
+            </ul>
+          </div>
+          <div class="paragraph">
+            <p>Keystone worker counts, increase the worker count to available cpus/2
+              if you have enough ram</p>
+          </div>
+          <div class="listingblock">
+            <div class="content">
+              <pre>[root@undercloud ~]# cat /etc/httpd/conf.d/10-keystone_wsgi_admin.conf | grep processes
+  WSGIDaemonProcess keystone_admin display-name=keystone-admin group=keystone processes=4 threads=2 user=keystone
+[root@undercloud ~]# cat /etc/httpd/conf.d/10-keystone_wsgi_main.conf  | grep processes
+  WSGIDaemonProcess keystone_main display-name=keystone-main group=keystone processes=4 threads=2 user=keystone</pre>
+            </div>
+          </div>
+          <div class="paragraph">
+            <p>Heat RPC response timeout, increase to 600 to be on the safe side</p>
+          </div>
+          <div class="listingblock">
+            <div class="content">
+              <pre>[root@undercloud ~]# cat /etc/heat/heat.conf | grep ^rpc_response_timeout
+rpc_response_timeout = 600</pre>
+            </div>
+          </div>
+        </div>
+        <div class="sect2">
+          <h3 id="_undercloud_install_debug">Undercloud install Debug</h3>
+          <div class="paragraph">
+            <p>TODO!!</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="sect1">
+      <h2 id="_introspection">Introspection</h2>
+      <div class="sectionbody">
+        <hr>
+        <div class="sect2">
+          <h3 id="_introspection_recomendations">Introspection Recomendations</h3>
+          <div class="ulist">
+            <ul>
+              <li>
+                <p>Try small instrospection bundles first.</p>
+              </li>
+              <li>
+                <p>Do not introspect more nodes than your DHCP range allows.</p>
+              </li>
+              <li>
+                <p>After introspection, wait for about two minutes to let DHCP leases
+                  to expire.</p>
+              </li>
+              <li>
+                <p>Watch for any additional DHCP servers on the provisioning network</p>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="sect2">
+          <h3 id="_introspection_debug">Introspection Debug</h3>
+          <div class="ulist">
+            <ul>
+              <li>
+                <p><strong>Logs</strong></p>
+              </li>
+            </ul>
+          </div>
+          <div class="listingblock">
+            <div class="content">
+              <pre>[root@undercloud ironic]# ls -l /var/log/ironic-inspector/*.log
+-rw-r--r--. 1 ironic-inspector ironic-inspector 32080 Jun  1 10:37 /var/log/ironic-inspector/ironic-inspector.log
+[root@undercloud ironic]# ls -l /var/log/ironic/*.log
+-rw-r--r--. 1 ironic ironic 2238295 Jun  3 08:26 /var/log/ironic/ironic-api.log
+-rw-r--r--. 1 ironic ironic  235499 Jun  2 07:54 /var/log/ironic/ironic-conductor.log
+root@undercloud ~]# journalctl -u openstack-ironic-inspector -u openstack-ironic-inspector-dnsmasq
+Jun 07 09:07:57 undercloud.localdomain ironic-inspector[1236]: 2017-06-07 09:07:57.353 1236 INFO ironic_inspector.node_cache [-] [node: ba4db2bf-c327-4fca-a37e-83cc17c1561a state processing] Updating node state: processing --&gt; finished
+Jun 07 09:07:57 undercloud.localdomain ironic-inspector[1236]: 2017-06-07 09:07:57.347 1236 INFO ironic_inspector.process [-] [node: ba4db2bf-c327-4fca-a37e-83cc17c1561a MAC aa:bb:cc:dd:ee:02] Introspection finished successfully
+Jun 07 09:07:57 undercloud.localdomain ironic-inspector[1236]: 2017-06-07 09:07:57.315 1236 INFO ironic_inspector.process [-] [node: ba4db2bf-c327-4fca-a37e-83cc17c1561a MAC aa:bb:cc:dd:ee:02] Node powered-off</pre>
+            </div>
+          </div>
+          <div class="ulist">
+            <ul>
+              <li>
+                <p><strong>Accessing logs from the ram disk run</strong></p>
+              </li>
+            </ul>
+          </div>
+          <div class="paragraph">
+            <p>If something fails during the introspection ramdisk run, ironic-inspector
+              stores the ramdisk logs in /var/log/ironic-inspector/ramdisk/ as gz-compressed
+              tar files. File names contain date, time and IPMI address of the node
+              if it was detected (only for bare metal).</p>
+          </div>
+          <div class="paragraph">
+            <p>If you want to inspect the ram disk run even if it didn&#8217;t fail
+              we have to modify the always_store_ramdisk_logs option in /etc/ironic-inspector/inspector.conf
+              and restart the service</p>
+          </div>
+          <div class="listingblock">
+            <div class="content">
+              <pre>[root@undercloud ~]# sed -ibck 's/^.*always_store_ramdisk_logs.*$/always_store_ramdisk_logs = true/g' /etc/ironic-inspector/inspector.conf
+[root@undercloud ~]#  openstack baremetal introspection start ba4db2bf-c327-4fca-a37e-83cc17c1561a
+[root@undercloud ~]# systemctl restart openstack-ironic-inspector.service
+[root@undercloud ~]# ls -l /var/log/ironic-inspector/ramdisk/
+total 20
+-rw-r--r--. 1 ironic-inspector ironic-inspector 16820 Jun  7 09:16 ba4db2bf-c327-4fca-a37e-83cc17c1561a_20170607-131619.504127.tar.gz</pre>
+            </div>
+          </div>
+          <div class="ulist">
+            <ul>
+              <li>
+                <p><strong>Log into the ramdisk for debugging via ssh/console</strong></p>
+              </li>
+            </ul>
+          </div>
+          <div class="paragraph">
+            <p>Use ssl to create a hash for a password</p>
+          </div>
+          <div class="listingblock">
+            <div class="content">
+              <pre>[root@undercloud ~]# openssl passwd -1
+Password:
+Verifying - Password:
+$1$ZqPeffYv$CvGO/oS8b28YRdMMS2WCF1</pre>
+            </div>
+          </div>
+          <div class="paragraph">
+            <p>Edit /httpboot/inspector.ipxe manually. Find the line starting with “kernel”
+              and append rootpwd=”HASH” to it, also disable selinux with the selinux=0
+              option</p>
+          </div>
+          <div class="listingblock">
+            <div class="content">
+              <pre>[root@undercloud ~]# cat /httpboot/inspector.ipxe
+#!ipxe
+
+:retry_boot
+imgfree
+kernel --timeout 60000 http://10.0.0.10:8088/agent.kernel ipa-inspection-callback-url=http://10.0.0.10:5050/v1/continue ipa-inspection-collectors=default,extra-hardware,logs systemd.journald.forward_to_console=yes BOOTIF=${mac} ipa-inspection-dhcp-all-interfaces=1 ipa-collect-lldp=1 initrd=agent.ramdisk rootpwd="$1$UQ/HlKRP$pXaAJKgSS7z7SPqOTH0FV/" selinux=0 || goto retry_boot
+initrd --timeout 60000 http://10.0.0.10:8088/agent.ramdisk || goto retry_boot
+boot</pre>
+            </div>
+          </div>
+          <div class="ulist">
+            <ul>
+              <li>
+                <p><strong>Check the Ironic driver you are using is enabled and available</strong></p>
+              </li>
+            </ul>
+          </div>
+          <div class="listingblock">
+            <div class="content">
+              <pre>[root@undercloud ~]# openstack baremetal driver list
++---------------------+------------------------+
+| Supported driver(s) | Active host(s)         |
++---------------------+------------------------+
+| ipmi                | undercloud.localdomain |
+| pxe_drac            | undercloud.localdomain |
+| pxe_ilo             | undercloud.localdomain |
+| pxe_ipmitool        | undercloud.localdomain |
+| pxe_ssh             | undercloud.localdomain |
++---------------------+------------------------+</pre>
+            </div>
+          </div>
+          <div class="ulist">
+            <ul>
+              <li>
+                <p><strong>If you have power on/power off timeout problems in Ironic(<a href="https://access.redhat.com/solutions/2332151" class="bare">https://access.redhat.com/solutions/2332151</a>), increase the power_retry and power_wait parameters</strong></p>
+              </li>
+            </ul>
+          </div>
+          <div class="listingblock">
+            <div class="content">
+              <pre># Options defined in ironic.drivers.modules.ilo.power
+#
+
+# Number of times a power operation needs to be retried
+# (integer value)
+power_retry=6
+
+# Amount of time in seconds to wait in between power
+# operations (integer value)
+power_wait=20</pre>
+            </div>
+          </div>
+          <div class="ulist">
+            <ul>
+              <li>
+                <p><strong>If using IPMI driver, and errors are seen check:</strong></p>
+                <div class="ulist">
+                  <ul>
+                    <li>
+                      <p>Ipmitool is installed.</p>
+                    </li>
+                    <li>
+                      <p>The IPMI controller on your bare metal server is turned on.</p>
+                    </li>
+                    <li>
+                      <p>The IPMI controller credentials passed in the command are right.</p>
+                    </li>
+                    <li>
+                      <p>The conductor node has a route to the IPMI controller. This
+                        can be checked by just pinging the IPMI controller IP from
+                        the conductor node.</p>
+                    </li>
+                  </ul>
+                </div>
+              </li>
+            </ul>
+          </div>
+          <div class="paragraph">
+            <p>Also test that you can access the status of the BMC using the ipmitool
+              command several times</p>
+          </div>
+          <div class="listingblock">
+            <div class="content">
+              <pre>ipmitool -I lanplus -H &lt;ip-address&gt; -U &lt;username&gt; -P &lt;password&gt; chassis power status</pre>
+            </div>
+          </div>
+          <div class="ulist">
+            <ul>
+              <li>
+                <p><strong>slow or unresponsive BMCs in the environment</strong></p>
+              </li>
+            </ul>
+          </div>
+          <div class="paragraph">
+            <p>the retry_timeout configuration option in the [ipmi] section may need
+              to be increased. The default is fairly conservative, as setting this
+              timeout too low can cause older BMCs to crash and require a hard-reset.</p>
+          </div>
+          <div class="listingblock">
+            <div class="content">
+              <pre>[root@undercloud ~]# more /etc/ironic/ironic.conf | grep ^retry_timeout
+retry_timeout = 15</pre>
+            </div>
+          </div>
+          <div class="ulist">
+            <ul>
+              <li>
+                <p><strong>Check Bios config "Legacy" or "UEFI"</strong></p>
+              </li>
+            </ul>
+          </div>
+          <div class="paragraph">
+            <p>Out-of-the-box install of Red Hat OpenStack Platform 10 sets ironic.conf
+              on the undercloud in default_boot_mode = bios</p>
+          </div>
+          <div class="paragraph">
+            <p>The default state of the ironic.conf file on the undercloud is:</p>
+          </div>
+          <div class="listingblock">
+            <div class="content">
+              <pre>default_boot_mode = bios</pre>
+            </div>
+          </div>
+          <div class="paragraph">
+            <p>If uefi boot is needed in introspection and deploy, change it to:</p>
+          </div>
+          <div class="listingblock">
+            <div class="content">
+              <pre>default_boot_mode = uefi</pre>
+            </div>
+          </div>
+          <div class="ulist">
+            <ul>
+              <li>
+                <p><strong>DHCP info and debug for introspection</strong></p>
+              </li>
+            </ul>
+          </div>
+          <div class="paragraph">
+            <p>The introspection dhcp service uses dnsmasq:</p>
+          </div>
+          <div class="listingblock">
+            <div class="content">
+              <pre>[root@undercloud ~]# ps -ef | grep -i ironic-inspector | grep dns
+nobody    1310     1  0 Jun01 ?        00:00:00 /sbin/dnsmasq --conf-file=/etc/ironic-inspector/dnsmasq.conf</pre>
+            </div>
+          </div>
+          <div class="paragraph">
+            <p>The conf file is in /etc/ironic-inspector/dnsmasq.conf, you can check
+              interface and dhcp-range:</p>
+          </div>
+          <div class="listingblock">
+            <div class="content">
+              <pre>[root@undercloud ~]# cat /etc/ironic-inspector/dnsmasq.conf
+port=0
+interface=br-ctlplane
+bind-interfaces
+dhcp-range=10.0.0.100,10.0.0.120,29
+dhcp-sequential-ip
+dhcp-match=ipxe,175
+dhcp-match=set:efi,option:client-arch,7
+# Client is running iPXE; move to next stage of chainloading
+dhcp-boot=tag:ipxe,http://10.0.0.10:8088/inspector.ipxe
+# Client is running PXE over EFI; send EFI version of iPXE chainloader
+dhcp-boot=tag:efi,ipxe.efi
+# Client is running PXE over BIOS; send BIOS version of iPXE chainloader
+dhcp-boot=undionly.kpxe,localhost.localdomain,10.0.0.10</pre>
+            </div>
+          </div>
+          <div class="paragraph">
+            <p>Use tcpdump on the provisioning interface:</p>
+          </div>
+          <div class="literalblock">
+            <div class="content">
+              <pre>[root@undercloud ~]# tcpdump -i &lt;network-interface&gt; port 67 or port 68 or port 69 -e -n</pre>
+            </div>
+          </div>
+          <div class="paragraph">
+            <p>Filter matching the client Mac address:</p>
+          </div>
+          <div class="literalblock">
+            <div class="content">
+              <pre>tcpdump -i br0 -vvv -s 1500 '((port 67 or port 68) and (udp[38:4] = 0x3e0ccf08))'</pre>
+            </div>
+          </div>
+          <div class="paragraph">
+            <p>Tcpdump filter to capture packets sent by the client (DISCOVER, REQUEST,
+              INFORM):</p>
+          </div>
+          <div class="literalblock">
+            <div class="content">
+              <pre>tcpdump -i br0 -vvv -s 1500 '((port 67 or port 68) and (udp[8:1] = 0x1))'</pre>
+            </div>
+          </div>
+          <div class="ulist">
+            <ul>
+              <li>
+                <p><strong>If the Dhcp client isn&#8217;t able to comunicate with the server, check that the client Mac is getting whitelisted in Iptables</strong></p>
+              </li>
+            </ul>
+          </div>
+          <div class="paragraph">
+            <p>We look for the the mac address of the overcloud node we are going to
+              introspect, in this case the node uid is <strong>50fd27b6-7af7-425e-94b2-f6fb0f9f5bfa</strong>              with mac <strong>aa:bb:cc:dd:ee:01</strong></p>
+          </div>
+          <div class="literalblock">
+            <div class="content">
+              <pre> [root@undercloud ~]# openstack baremetal port list
++--------------------------------------+-------------------+
+| UUID                                 | Address           |
++--------------------------------------+-------------------+
+| 5da9df9d-adea-4d89-ade2-f083478cdfbf | aa:bb:cc:dd:ee:01 |
+| 3a2687cf-318b-4c80-bc18-01c20b49ed29 | aa:bb:cc:dd:ee:02 |
+| 04cf3e6a-c27f-4ce4-9719-93dfe82e48db | aa:bb:cc:dd:ee:03 |
+| 24b39ae8-1009-4d21-9269-683f010790bf | aa:bb:cc:dd:ee:04 |
++--------------------------------------+-------------------+
+[root@undercloud ~]# openstack baremetal port show 5da9df9d-adea-4d89-ade2-f083478cdfbf
++------------+--------------------------------------+
+| Field      | Value                                |
++------------+--------------------------------------+
+| address    | aa:bb:cc:dd:ee:01                    |
+| created_at | 2017-06-01T13:57:08+00:00            |
+| extra      | {}                                   |
+| node_uuid  | 50fd27b6-7af7-425e-94b2-f6fb0f9f5bfa |
+| updated_at | 2017-06-02T11:53:59+00:00            |
+| uuid       | 5da9df9d-adea-4d89-ade2-f083478cdfbf |
++------------+--------------------------------------+</pre>
+            </div>
+          </div>
+          <div class="paragraph">
+            <p>We now are going to run the introspection on that node and check the
+              iptable rules, our mac is going to get white listed and removed from
+              the macs with the DROP target</p>
+          </div>
+          <div class="literalblock">
+            <div class="content">
+              <pre> [root@undercloud ~]# iptables -nL | grep -A 2 "Chain ironic-inspector"
+Chain ironic-inspector (1 references)
+target     prot opt source               destination
+REJECT     all  --  0.0.0.0/0            0.0.0.0/0            reject-with icmp-port-unreachable
+[root@undercloud ~]# openstack  baremetal introspection start 50fd27b6-7af7-425e-94b2-f6fb0f9f5bfa
+[root@undercloud ~]# iptables -nL | grep -B 2 -A 2 -i AA:BB
+Chain ironic-inspector (1 references)
+target     prot opt source               destination
+DROP       all  --  0.0.0.0/0            0.0.0.0/0            MAC AA:BB:CC:DD:EE:04
+DROP       all  --  0.0.0.0/0            0.0.0.0/0            MAC AA:BB:CC:DD:EE:03
+DROP       all  --  0.0.0.0/0            0.0.0.0/0            MAC AA:BB:CC:DD:EE:02
+ACCEPT     all  --  0.0.0.0/0            0.0.0.0/0</pre>
+            </div>
+          </div>
+          <div class="paragraph">
+            <p>We can also check in the logs the same process in the introspection logs</p>
+          </div>
+          <div class="literalblock">
+            <div class="content">
+              <pre> [root@undercloud ironic-inspector]# grep -i 'aa:bb:cc:dd:ee:01' ironic-inspector.log
+2017-06-07 16:48:49.196 7354 INFO ironic_inspector.introspect [-] [node: 50fd27b6-7af7-425e-94b2-f6fb0f9f5bfa state starting] Whitelisting MAC's [u'aa:bb:cc:dd:ee:01'] on the firewall
+2017-06-07 16:48:51.688 7354 INFO ironic_inspector.introspect [-] [node: 50fd27b6-7af7-425e-94b2-f6fb0f9f5bfa state starting] The following attributes will be used for look up: {u'mac': [u'aa:bb:cc:dd:ee:01']}</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="sect1">
+      <h2 id="_deploy">Deploy</h2>
+      <div class="sectionbody">
+        <hr>
+        <div class="sect2">
+          <h3 id="_deploy_recommendations">Deploy recommendations</h3>
+          <div class="ulist">
+            <ul>
+              <li>
+                <p><strong>Try small scale deployment first</strong></p>
+              </li>
+            </ul>
+          </div>
+          <div class="paragraph">
+            <p>Try deployment with the smallest number of nodes possible,Single Controller,
+              single Compute, single CephStorage, etc.</p>
+          </div>
+          <div class="ulist">
+            <ul>
+              <li>
+                <p><strong>Deployment batches</strong></p>
+              </li>
+            </ul>
+          </div>
+          <div class="paragraph">
+            <p>We recommend not deploying 32 nodes at a time. 32 is the typical amount
+              you can fit within a 42 RU rack. Deploying 32 at a time also minimizes
+              the debugging necessary to diagnose issues with the deployment.</p>
+          </div>
+          <div class="ulist">
+            <ul>
+              <li>
+                <p><strong>Configure even unused NICs</strong></p>
+              </li>
+            </ul>
+          </div>
+          <div class="paragraph">
+            <p>Specify NIC configurations for network interfaces unused by OpenStack
+              Define interfaces in YAML files in the nic-configs directory:</p>
+          </div>
+          <div class="literalblock">
+            <div class="content">
+              <pre>Set use_dhcp: false and defroute: false</pre>
+            </div>
+          </div>
+          <div class="ulist">
+            <ul>
+              <li>
+                <p><strong>Power off unused nodes</strong></p>
+              </li>
+            </ul>
+          </div>
+          <div class="paragraph">
+            <p>Before redeployment, verify that unused nodes are OFF Use DRAC/iLO to
+              check power state Do not relay on Ironic, We have seen cases where
+              nodes from previous deployments which are now in maintenance, are left
+              hanging around in a powered on state causing problems with ongoing
+              deployments.</p>
+          </div>
+        </div>
+        <div class="sect2">
+          <h3 id="_deploy_debug">Deploy Debug</h3>
+          <div class="paragraph">
+            <p>In this context we consider deploy the Phase during wich the overcloud
+              image is copied to the local overcloud nodes, this is done booting
+              the undercloud nodes via ipxe to load a ramdisk, then exporting the
+              local root disk as a iscsi target to the undercloud node, and then
+              the overcloud image gets copied via dd</p>
+          </div>
+          <div class="ulist">
+            <ul>
+              <li>
+                <p><strong>Deploy Logs</strong></p>
+              </li>
+            </ul>
+          </div>
+          <div class="paragraph">
+            <p>If the deploy fails during deploy the ironic-conductor.log should have
+              the error</p>
+          </div>
+          <div class="listingblock">
+            <div class="content">
+              <pre>[root@undercloud ironic]# ls -l /var/log/ironic/ironic-conductor.log
+-rw-r--r--. 1 ironic ironic 288970 Jun  7 09:16 /var/log/ironic/ironic-conductor.log</pre>
+            </div>
+          </div>
+          <div class="paragraph">
+            <p>If you need to check the ramdisk run log output, it is saved in /var/log/ironic/deploy/
+              dir</p>
+          </div>
+          <div class="literalblock">
+            <div class="content">
+              <pre> [root@undercloud ironic]# ls -ld  /var/log/ironic/deploy/
+drwxr-xr-x. 2 ironic ironic 4096 Jun  5 02:48 /var/log/ironic/deploy/</pre>
+            </div>
+          </div>
+          <div class="paragraph">
+            <p>Inside the dir you can find a tarball named after the UID of the overcloud
+              node, the journal file contais the output of the run</p>
+          </div>
+          <div class="literalblock">
+            <div class="content">
+              <pre> [root@undercloud ironic]# ls -l  /var/log/ironic/deploy/*tar.gz
+-rw-r--r--. 1 ironic ironic 17573 Jun  5 02:48 /var/log/ironic/deploy/d8ee5249-a016-444f-bd02-77e422332381_32068670-ef4e-4699-911f-6c0ed4da541c_2017-06-05-06:48:24.tar.gz
+-rw-r--r--. 1 ironic ironic 17806 Jun  5 02:48 /var/log/ironic/deploy/e4cf9855-392c-40be-92b6-9b10674373d0_d92dc0f2-d03c-4cf4-9d1e-36772055520a_2017-06-05-06:48:23.tar.gz
+[root@undercloud ironic]# tar -zxvf /var/log/ironic/deploy/d8ee5249-a016-444f-bd02-77e422332381_32068670-ef4e-4699-911f-6c0ed4da541c_2017-06-05-06:48:24.tar.gz &amp;&amp; tail journal
+Jun 05 02:48:20 host-10-0-0-62 logger[2251]: 83haiku: debug: /dev/vda1 is not a BeFS partition: exiting
+Jun 05 02:48:20 host-10-0-0-62 logger[2251]: 50mounted-tests: debug: running subtest /usr/libexec/os-probes/mounted/90linux-distro
+Jun 05 02:48:20 host-10-0-0-62 logger[2251]: 50mounted-tests: debug: running subtest /usr/libexec/os-probes/mounted/90solaris
+Jun 05 02:48:20 host-10-0-0-62 logger[2251]: 50mounted-tests: debug: running subtest /usr/libexec/os-probes/mounted/efi
+Jun 05 02:48:21 host-10-0-0-62 ironic-python-agent[525]: 2017-06-05 02:48:21.149 525 INFO ironic_python_agent.extensions.image [-] GRUB2 successfully installed on /dev/vda
+Jun 05 02:48:21 host-10-0-0-62 kernel: XFS (vda2): Unmounting Filesystem
+Jun 05 02:48:21 host-10-0-0-62 ironic-python-agent[525]: 2017-06-05 02:48:21.285 525 INFO root [-] Command image.install_bootloader completed: Command name: install_bootloader, params: {u'efi_system_part_uuid': None, u'root_uuid': u'2a59886b-5268-41e5-b37f-c92611eabd96'}, status: SUCCEEDED, result: None.
+Jun 05 02:48:21 host-10-0-0-62 ironic-python-agent[525]: ::ffff:10.0.0.10 - - [05/Jun/2017 02:48:21] "POST /v1/commands?wait=true HTTP/1.1" 200 265
+Jun 05 02:48:23 host-10-0-0-62 NetworkManager[186]: &lt;warn&gt;  [1496645303.8756] dhcp4 (eth2): request timed out</pre>
+            </div>
+          </div>
+          <div class="ulist">
+            <ul>
+              <li>
+                <p><strong>Pxe boot Dnsmasq/dhcp for deployment</strong></p>
+              </li>
+            </ul>
+          </div>
+          <div class="paragraph">
+            <p>The logs to check for deployment</p>
+          </div>
+          <div class="paragraph">
+            <p>The dhcp deployment service is different from the introspection dhcp
+              service, the deployment dnsmasq processes is running inside a namespace
+              created by neutron:</p>
+          </div>
+          <div class="literalblock">
+            <div class="content">
+              <pre> [root@undercloud ~]# ps -ef | grep -i dhcp-hostsfile
+nobody    4243     1  0 Jun01 ?        00:00:00 dnsmasq --no-hosts --no-resolv --strict-order --except-interface=lo --pid-file=/var/lib/neutron/dhcp/0ba89bb7-dccd-4001-bb12-5b53ed82c594/pid --dhcp-hostsfile=/var/lib/neutron/dhcp/0ba89bb7-dccd-4001-bb12-5b53ed82c594/host --addn-hosts=/var/lib/neutron/dhcp/0ba89bb7-dccd-4001-bb12-5b53ed82c594/addn_hosts --dhcp-optsfile=/var/lib/neutron/dhcp/0ba89bb7-dccd-4001-bb12-5b53ed82c594/opts --dhcp-leasefile=/var/lib/neutron/dhcp/0ba89bb7-dccd-4001-bb12-5b53ed82c594/leases --dhcp-match=set:ipxe,175 --bind-interfaces --interface=tap9fa1fa7b-14 --dhcp-range=set:tag0,10.0.0.0,static,86400s --dhcp-option-force=option:mtu,1500 --dhcp-lease-max=256 --conf-file=/etc/dnsmasq-ironic.conf</pre>
+            </div>
+          </div>
+          <div class="literalblock">
+            <div class="content">
+              <pre> [root@undercloud ~]# ip netns
+qdhcp-0ba89bb7-dccd-4001-bb12-5b53ed82c594
+[root@undercloud ~]# ip netns exec qdhcp-0ba89bb7-dccd-4001-bb12-5b53ed82c594 ip a
+1: lo: &lt;LOOPBACK,UP,LOWER_UP&gt; mtu 65536 qdisc noqueue state UNKNOWN qlen 1
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host
+       valid_lft forever preferred_lft forever
+9: tap9fa1fa7b-14: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu 1500 qdisc noqueue state UNKNOWN qlen 1000
+    link/ether fa:16:3e:ae:bf:50 brd ff:ff:ff:ff:ff:ff
+    inet 10.0.0.50/24 brd 10.0.0.255 scope global tap9fa1fa7b-14
+       valid_lft forever preferred_lft forever
+    inet6 fe80::f816:3eff:feae:bf50/64 scope link
+       valid_lft forever preferred_lft forever</pre>
+            </div>
+          </div>
+          <div class="paragraph">
+            <p>So if we want to Tcpdump is better if we do it inside the namespace using
+              the tap device:</p>
+          </div>
+          <div class="literalblock">
+            <div class="content">
+              <pre>[root@undercloud ~]# ip netns exec qdhcp-0ba89bb7-dccd-4001-bb12-5b53ed82c594 tcpdump -i tap9fa1fa7b-14 -vvv -s 1500 '((port 67 or port 68))'</pre>
+            </div>
+          </div>
+          <div class="paragraph">
+            <p>When the undercloud is a virtual machine running on VMware ESXi, DHCP
+              during Introspection is successful, but it fails during deployment.
+              DHCP requests are being received on the tap device, but the offers
+              are not received by the nodes Forged transmit has to be set to Accept
+              so ESXi does not compare source and effective MAC addresses. (<a href="https://access.redhat.com/solutions/1980283"
+                class="bare">https://access.redhat.com/solutions/1980283</a>)</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="sect1">
+      <h2 id="_overcloud_deploy">Overcloud Deploy</h2>
+      <div class="sectionbody">
+        <hr>
+        <div class="paragraph">
+          <p>TODO</p>
+        </div>
+        <div class="sect2">
+          <h3 id="_mistral_plans_debug">Mistral Plans Debug</h3>
+          <div class="paragraph">
+            <p>TODO</p>
+          </div>
+        </div>
+        <div class="sect2">
+          <h3 id="_overcloud_deploy_debug">Overcloud Deploy Debug</h3>
+          <div class="paragraph">
+            <p>TODO</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+
+</html>
