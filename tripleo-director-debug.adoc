@@ -449,7 +449,212 @@ When the dd copy has finished and the overcloud image has been successfully popu
 
 TODO
 
+=== Overcloud templates
+
+*os-net-config github*
+The os-net-config github has a sample dir with all the combinations that are supported by os-net-config and you can use those examples directly in your net-config/ yaml templates
+http://git.openstack.org/cgit/openstack/os-net-config/tree/etc/os-net-config/samples
+
 === Mistral Plans Debug
+
+*The Mistral log is very detailed and useful for in depth debugging*
+
+ tail -f /var/log/mistral/engine.log | grep "ERROR\|tripleo_common";
+
+*Checking Mitral with cli to spot Errors*
+
+ [root@undercloud ~]# mistral execution-list | grep "ERROR";
+# Grab the execution ID from above.
+[root@undercloud ~]# mistral execution-get $EXECUTION_ID
+[root@undercloud ~]# mistral execution-get-output $EXECUTION_ID
+# Also look at the actions
+[root@undercloud ~]# mistral action-execution-list
+[root@undercloud ~]# mistral action-execution-get-output $ACTION_ID
+
+Here is and example, we can check  the exection-list
+
+ [root@undercloud mistral]#  mistral execution-list 
++------------------------------+------------------------------+------------------------------+------------------------+------------------------------+---------+------------------------------+---------------------+---------------------+
+| ID                           | Workflow ID                  | Workflow name                | Description            | Task Execution ID            | State   | State info                   | Created at          | Updated at          |
++------------------------------+------------------------------+------------------------------+------------------------+------------------------------+---------+------------------------------+---------------------+---------------------+
+| 8aadba6c-a46d-4b87-aa0d-     | 1ab1c5d1-7408-40e3-b02d-     | tripleo.baremetal.v1.introsp |                        | <none>                       | SUCCESS | None                         | 2017-06-07 08:18:16 | 2017-06-07 09:19:20 |
+| d755981f2836                 | 35367fbb809e                 | ect_manageable_nodes         |                        |                              |         |                              |                     |                     |
+| 726a96c4-36f7-45ff-9795-b58a | e433d0eb-99cd-450a-a6ae-     | tripleo.baremetal.v1.introsp | sub-workflow execution | 9830243f-a701-48b1-8fcc-     | SUCCESS | None                         | 2017-06-07 08:18:18 | 2017-06-07 09:19:18 |
+| bcb93f17                     | 3d525401e368                 | ect                          |                        | 89c3fa2ac501                 |         |                              |                     |                     |
+
+And check the output using the Execution ID
+
+ [root@undercloud mistral]# mistral execution-get-output 726a96c4-36f7-45ff-9795-b58abcb93f17
+{
+    "status": "SUCCESS", 
+    "message": "Successfully introspected nodes.", 
+    "introspected_nodes": {
+        "ba4db2bf-c327-4fca-a37e-83cc17c1561a": {
+            "uuid": "ba4db2bf-c327-4fca-a37e-83cc17c1561a", 
+
+
+*Manually execute a workflow* 
+
+
+We can check all the triple workbooks 
+
+ [root@undercloud mistral]# mistral workbook-list
++----------------------------+--------+---------------------+------------+
+| Name                       | Tags   | Created at          | Updated at |
++----------------------------+--------+---------------------+------------+
+| tripleo.baremetal.v1       | <none> | 2017-06-01 13:54:18 | None       |
+| tripleo.deployment.v1      | <none> | 2017-06-01 13:54:21 | None       |
+| tripleo.package_update.v1  | <none> | 2017-06-01 13:54:23 | None       |
+| tripleo.plan_management.v1 | <none> | 2017-06-01 13:54:27 | None       |
+| tripleo.scale.v1           | <none> | 2017-06-01 13:54:28 | None       |
+| tripleo.stack.v1           | <none> | 2017-06-01 13:54:30 | None       |
+| tripleo.validations.v1     | <none> | 2017-06-01 13:54:34 | None       |
++----------------------------+--------+---------------------+------------+
+
+With workflow list, we can check all the workflows for a workbook
+
+ [root@undercloud mistral]#  mistral workflow-list | grep "tripleo.baremetal.v1"  | awk -F "|" '{ print $3 }'
+ tripleo.baremetal.v1.introspect_manageable_nodes          
+ tripleo.baremetal.v1.set_node_state                       
+ tripleo.baremetal.v1.manage                               
+ tripleo.baremetal.v1.create_raid_configuration            
+ tripleo.baremetal.v1.manual_cleaning                      
+ tripleo.baremetal.v1.tag_nodes                            
+ tripleo.baremetal.v1.provide                              
+ tripleo.baremetal.v1.register_or_update                   
+ tripleo.baremetal.v1.cellv2_discovery                     
+ tripleo.baremetal.v1.configure_manageable_nodes           
+ tripleo.baremetal.v1.tag_node                             
+ tripleo.baremetal.v1.set_power_state                      
+ tripleo.baremetal.v1.provide_manageable_nodes             
+ tripleo.baremetal.v1.configure                            
+ tripleo.baremetal.v1.introspect 
+
+We can then use the mistral workflow-get command to se the input parameters needed by the workflow, we are going to use the tripleo.baremetal.v1.provide_manageable_nodes , this simply list ironic nodes in manageable state
+
+ [root@undercloud mistral]# mistral workflow-get tripleo.baremetal.v1.provide_manageable_nodes
++------------+-----------------------------------------------+
+| Field      | Value                                         |
++------------+-----------------------------------------------+
+| ID         | b9977a5c-2f04-40cf-9104-ea1733bb0d45          |
+| Name       | tripleo.baremetal.v1.provide_manageable_nodes |
+| Project ID | 143c2579d1d749308f92033209fc79c5              |
+| Tags       | <none>                                        |
+| Input      | queue_name=tripleo                            |
+| Created at | 2017-06-01 13:54:18                           |
+| Updated at | None                                          |
++------------+-----------------------------------------------+
+
+And you can execute the workflow 
+
+ [root@undercloud mistral]# mistral execution-create  tripleo.baremetal.v1.provide_manageable_nodes '{"queue_name": "tripleo"}'
++-------------------+-----------------------------------------------+
+| Field             | Value                                         |
++-------------------+-----------------------------------------------+
+| ID                | c6212165-fb42-4a83-8074-05496866bb8e          |
+| Workflow ID       | b9977a5c-2f04-40cf-9104-ea1733bb0d45          |
+| Workflow name     | tripleo.baremetal.v1.provide_manageable_nodes |
+| Description       |                                               |
+| Task Execution ID | <none>                                        |
+| State             | RUNNING                                       |
+| State info        | None                                          |
+| Created at        | 2017-06-08 21:25:41                           |
+| Updated at        | 2017-06-08 21:25:41                           |
++-------------------+-----------------------------------------------+
+
+With the ID we can see the execution list and get the output
+
+ [root@undercloud mistral]# mistral execution-list | grep c6212165-fb42-4a83-8074-05496866bb8e
+| c6212165-fb42-4a83-8074-05496866bb8e | b9977a5c-2f04-40cf-9104-ea1733bb0d45 | tripleo.baremetal.v1.provide_manageable_nodes           |                        | <none>                               | SUCCESS | None                         | 2017-06-08 21:25:41 | 2017-06-08 21:26:05 |
+[root@undercloud mistral]# mistral execution-get-output c6212165-fb42-4a83-8074-05496866bb8e
+{
+    "managed_nodes": [
+        "50fd27b6-7af7-425e-94b2-f6fb0f9f5bfa", 
+        "ba4db2bf-c327-4fca-a37e-83cc17c1561a"
+    ], 
+    "status": "SUCCESS"
+}
+
+
+*You can re-run failed mistral tasks using*
+
+ [root@undercloud mistral]#  mistral task-list;
+# Find the ID for the failed task.
+[root@undercloud mistral]#  mistral task-rerun $ID;
+
+*Get your overcloud passwords from mistral*
+
+A plan is the combination of a as a Swift container + Mistral environment. 
+
+In swift we have the templates we provided:
+
+ [root@undercloud mistral]# swift list overcloud | grep net-config
+ci/common/net-config-multinode-os-net-config.yaml
+ci/common/net-config-multinode.yaml
+firstboot/os-net-config-mappings.yaml
+net-config-bond.yaml
+net-config-bridge.yaml
+net-config-linux-bridge.yaml
+net-config-noop.yaml
+net-config-static-bridge-with-external-dhcp.yaml
+net-config-static-bridge.yaml
+net-config-static.yaml
+net-config-undercloud.yaml
+network/scripts/run-os-net-config.sh
+
+In the mistral enviroment we can find variables includinf the default passwords:
+
+ [root@undercloud mistral]# mistral environment-get overcloud
++-------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Field       | Value                                                                                                                                                                                                                         |
++-------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Name        | overcloud                                                                                                                                                                                                                     |
+| Description | <none>                                                                                                                                                                                                                        |
+| Variables   | {                                                                                                                                                                                                                             |
+|             |     "parameter_defaults": {                                                                                                                                                                                                   |
+|             |         "ControllerCount": 1,                                                                                                                                                                                                 |
+|             |         "NovaComputeLibvirtType": "qemu",                                                                                                                                                                                     |
+|             |         "NtpServer": "95.81.173.74",                                                                                                                                                                                          |
+|             |         "ComputeCount": 1,                                                                                                                                                                                                    |
+|             |         "StackAction": "CREATE",                                                                                                                                                                                              |
+|             |         "OvercloudComputeFlavor": "compute",                                                                                                                                                                                  |
+|             |         "OvercloudControlFlavor": "control",                                                                                                                                                                                  |
+|             |         "node_admin_extra_ssh_keys": "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDJW8V0cdSj0UjTEyEgaDg+I+PxTFQrrH3WJS5J3VPgGxXZjPrDFdr50EdOP9VyHbEJMZUlsu/+Vkf/evR5qKVmJ1Bqn91pdBd0rQOA0DBmfBgHqIkcHcyE++LB5lnzWMLCBe6mff0vU/UPHLg |
+|             | 0f4sRWWseDJNfHk90Y2F9nkkC6MmGlZ+ruHVK1pmtHwNfezoxrRDaN1qTzy4e5yqrWsfqNhW7UxUjWY288CvzmQ0szKY04gOBlZmRoZ2nr5WDavNaJRg2KWqdRoxHddiYOjGPubSUZ+YLDyXUudZhDEQIGC5lbsdP9NUleYeakTaGc6WkTP5VtwiHruJlhv3ChQfD Generated by TripleO",  |
+|             |         "DeployIdentifier": 1496917824,                                                                                                                                                                                       |
+|             |         "SwiftRingPutTempurl": "http://10.0.0.10:8080/v1/AUTH_143c2579d1d749308f92033209fc79c5/overcloud-swift-rings/swift-rings.tar.gz?temp_url_sig=28729926f46732a3917e9b9095b442747ae349c6&temp_url_expires=1497004223",   |
+|             |         "SwiftRingGetTempurl": "http://10.0.0.10:8080/v1/AUTH_143c2579d1d749308f92033209fc79c5/overcloud-swift-rings/swift-rings.tar.gz?temp_url_sig=958cf09e9f554a2be24f1314cf144fa96225804f&temp_url_expires=1497004223",   |
+|             |         "UpdateIdentifier": ""                                                                                                                                                                                                |
+|             |     },                                                                                                                                                                                                                        |
+|             |     "passwords": {                                                                                                                                                                                                            |
+|             |         "KeystoneFernetKey1": "cbTCTW5nGP-8u7x9jw6ti9_t65YUsByy8EBdw3XkNao=",                                                                                                                                                 |
+|             |         "KeystoneFernetKey0": "xbwAGJ_-Y-LVbIcH9PlNiCVb4NT_5EyfG0rRoVXOkDM=",                                                                                                                                                 |
+|             |         "HAProxyStatsPassword": "EdDx72ybkwDw4b2KM3tkdN7bT",                                                                                                                                                                  |
+|             |         "HeatPassword": "dUR9C9Qy4eBxgD82usZhvGFsD",                                                                                                                                                                          |
+|             |         "KeystoneCredential1": "h7AQ-HYvOFzpU7Lxb2bFywYkEkK3l9dJDRXFw1Kl7xI=",                                                                                                                                                |
+|             |         "CongressPassword": "pKNBHNWrxsRpjVpRJYgcjMwgp",                                                                                                                                                                      |
+|             |         "NeutronPassword": "YPDgACsfmN4uGHcnzebc3rEJv",                                                                                                                                                                       |
+|             |         "SnmpdReadonlyUserPassword": "bcc0f245d947ea6b62eea3aa63bdbfb3380ff0b5",                                                                                                                                              |
+|             |         "GlancePassword": "Nwy9PbgccFv7K2AFpjfQs9tG8",                                                                                                                                                                        |
+|             |         "AdminPassword": "YjrqYfGvhfpmatkzpHD9R9myj",                                                                                                                                                                         |
+|             |         "IronicPassword": "KhKes3scq9tEd9B3GPf37jRTr",                                                                                                                                                                        |
+|             |         "HeatStackDomainAdminPassword": "VkE48BwexxcCZXM9DR4putAPT",                                                                                                                                                          |
+|             |         "ZaqarPassword": "F86nYgsqmHbedfMfReUJXpVra",                                                                                                                                                                         |
+|             |         "MysqlClustercheckPassword": "fWrB46QPNcuuPgFUe8f7pbjRc",                                                                                                                                                             |
+|             |         "NovaPassword": "cWH7k49BtwEu4bZjAD9VKracH",                                                                                                                                                                          |
+|             |         "GnocchiPassword": "DN6eBJTqHybgdXcUhtM9ATbcA",                                                                                                                                                                       |
+|             |         "CephAdminKey": "AQCwHDBZAAAAABAApykHpuC0OGnz8BJ6NOovSw==",                                                                                                                                                           |
+|             |         "Ec2ApiPassword": "ZcG9GWRkJRTc8HGuFNdXtaQwh",                                                                                                                                                                        |
+|             |         "CeilometerPassword": "szMYxnT3xXE6bNN6kPr6Ac6qr",            
+
+
+
+*Full overcloud install using Mistral*
+
+http://tripleo.org/mistral-api/mistral-api.html
+
+
+
 
 TODO
 
