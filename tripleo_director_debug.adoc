@@ -1,0 +1,654 @@
+= Tripleo/Director Debugging 
+:toc:
+
+== Undercloud
+
+'''
+=== Undercloud install Recommendations
+
+*Undercloud recommended specs*
+
+ - CPUs:  2x Physical cores, 24 threads 
+ - Disk: (single ssd or 2x drives 7200RPM) Root disk / raid1 Disk for swift 
+ - Memory:  64G 
+ - Network : 10G for provisioning
+
+*undercloud.conf recommended options*
+
+-----
+undercloud_debug = false  -->  only enable debug if needed
+enable_telemetry = false  -->  disable telemetry
+automated_clean = true    --> (is osp11 as clean_nodes=true) runs wipefs --force --all before making node available
+-----
+
+*Undercloud tunning*
+
+Keystone worker counts: increase the worker count to available cpus/2 if you have enough ram
+
+----
+[root@undercloud ~]# cat /etc/httpd/conf.d/10-keystone_wsgi_admin.conf | grep processes
+  WSGIDaemonProcess keystone_admin display-name=keystone-admin group=keystone processes=4 threads=2 user=keystone
+[root@undercloud ~]# cat /etc/httpd/conf.d/10-keystone_wsgi_main.conf  | grep processes
+  WSGIDaemonProcess keystone_main display-name=keystone-main group=keystone processes=4 threads=2 user=keystone
+----
+
+Heat RPC response timeout, increase to 600 to be on the safe side
+
+----
+[root@undercloud ~]# cat /etc/heat/heat.conf | grep ^rpc_response_timeout
+rpc_response_timeout = 600
+----
+
+=== Undercloud install Debug
+
+TODO!!
+
+
+== Introspection
+'''
+
+=== Introspection Recomendations
+   - Try small instrospection bundles first.
+   - Do not introspect more nodes than your DHCP range allows.
+   - After introspection, wait for about two minutes to let DHCP leases to expire.
+   - Watch for any additional DHCP servers on the provisioning network
+
+=== Introspection Debug
+*Logs*
+
+----
+[root@undercloud ironic]# ls -l /var/log/ironic-inspector/*.log
+-rw-r--r--. 1 ironic-inspector ironic-inspector 32080 Jun  1 10:37 /var/log/ironic-inspector/ironic-inspector.log
+[root@undercloud ironic]# ls -l /var/log/ironic/*.log
+-rw-r--r--. 1 ironic ironic 2238295 Jun  3 08:26 /var/log/ironic/ironic-api.log
+-rw-r--r--. 1 ironic ironic  235499 Jun  2 07:54 /var/log/ironic/ironic-conductor.log
+root@undercloud ~]# journalctl -u openstack-ironic-inspector -u openstack-ironic-inspector-dnsmasq
+Jun 07 09:07:57 undercloud.localdomain ironic-inspector[1236]: 2017-06-07 09:07:57.353 1236 INFO ironic_inspector.node_cache [-] [node: ba4db2bf-c327-4fca-a37e-83cc17c1561a state processing] Updating node state: processing --> finished
+Jun 07 09:07:57 undercloud.localdomain ironic-inspector[1236]: 2017-06-07 09:07:57.347 1236 INFO ironic_inspector.process [-] [node: ba4db2bf-c327-4fca-a37e-83cc17c1561a MAC aa:bb:cc:dd:ee:02] Introspection finished successfully
+Jun 07 09:07:57 undercloud.localdomain ironic-inspector[1236]: 2017-06-07 09:07:57.315 1236 INFO ironic_inspector.process [-] [node: ba4db2bf-c327-4fca-a37e-83cc17c1561a MAC aa:bb:cc:dd:ee:02] Node powered-off
+----
+
+*Accessing logs from the ram disk run*
+
+If something fails during the introspection ramdisk run, ironic-inspector stores the ramdisk logs in /var/log/ironic-inspector/ramdisk/ as gz-compressed tar files. File names contain date, time and IPMI address of the node if it was detected (only for bare metal).
+
+If you want to inspect the ram disk run even if it didn't fail we have to modify the always_store_ramdisk_logs option in  /etc/ironic-inspector/inspector.conf and restart the service
+
+----
+[root@undercloud ~]# sed -ibck 's/^.*always_store_ramdisk_logs.*$/always_store_ramdisk_logs = true/g' /etc/ironic-inspector/inspector.conf
+[root@undercloud ~]#  openstack baremetal introspection start ba4db2bf-c327-4fca-a37e-83cc17c1561a
+[root@undercloud ~]# systemctl restart openstack-ironic-inspector.service
+[root@undercloud ~]# ls -l /var/log/ironic-inspector/ramdisk/
+total 20
+-rw-r--r--. 1 ironic-inspector ironic-inspector 16820 Jun  7 09:16 ba4db2bf-c327-4fca-a37e-83cc17c1561a_20170607-131619.504127.tar.gz
+----
+
+*Log into the ramdisk for debugging via ssh/console*
+
+Use ssl to create a hash for a password
+
+----
+[root@undercloud ~]# openssl passwd -1
+Password: 
+Verifying - Password: 
+$1$ZqPeffYv$CvGO/oS8b28YRdMMS2WCF1
+----
+
+Edit /httpboot/inspector.ipxe manually. Find the line starting with “kernel” and append rootpwd=”HASH” to it, also disable selinux with the selinux=0 option
+
+----
+[root@undercloud ~]# cat /httpboot/inspector.ipxe 
+#!ipxe
+
+:retry_boot
+imgfree
+kernel --timeout 60000 http://10.0.0.10:8088/agent.kernel ipa-inspection-callback-url=http://10.0.0.10:5050/v1/continue ipa-inspection-collectors=default,extra-hardware,logs systemd.journald.forward_to_console=yes BOOTIF=${mac} ipa-inspection-dhcp-all-interfaces=1 ipa-collect-lldp=1 initrd=agent.ramdisk rootpwd="$1$UQ/HlKRP$pXaAJKgSS7z7SPqOTH0FV/" selinux=0 || goto retry_boot
+initrd --timeout 60000 http://10.0.0.10:8088/agent.ramdisk || goto retry_boot
+boot
+----
+
+We can see the options we added to the cmdline being lodaded on the next ram disk run
+
+ ramdisk/journal:Jun 07 09:14:38 localhost.localdomain kernel: Command line: ipa-inspection-callback-url=http://10.0.0.10:5050/v1/continue ipa-inspection-collectors=default,extra-hardware,logs systemd.journald.forward_to_console=yes BOOTIF=aa:bb:cc:dd:ee:02 ipa-inspection-dhcp-all-interfaces=1 ipa-collect-lldp=1 initrd=agent.ramdisk rootpwd="$1$UQ/HlKRP$pXaAJKgSS7z7SPqOTH0FV/" selinux=0
+
+*Modify ramdisk image*
+
+If you need to modify the ramdisk image to fix some issue you can follow these steps:
+
+ [root@undercloud httpboot]# cp /httpboot/agent.ramdisk /root/agent.ramdisk
+[root@undercloud ~]# mkdir agent.ramdisk.dir
+[root@undercloud ~]# cd agent.ramdisk.dir
+[root@undercloud agent.ramdisk.dir]# gzip -dc ../agent.ramdisk | cpio --extract
+1872427 blocks
+[root@undercloud agent.ramdisk.dir]# ls
+bin  boot  dev  etc  home  init  lib  lib64  lost+found  media  mnt  opt  proc  root  run  sbin  srv  sys  tmp  usr  var
+
+After modifiying the image, we zip it again and move it into the httpboot dir
+
+ [root@undercloud httpboot]# find . | cpio -oc | gzip -c -9>| ~/agent.ramdisk.root-test
+[root@undercloud httpboot]# cp ~/agent.ramdisk.root-test /httpboot/agent.ramdisk
+
+Check selinux permissions are ok:
+
+ [root@undercloud httpboot]#chcon system_u:object_r:httpd_user_content_t:s0 agent.ramdisk
+
+
+*Check the Ironic driver you are using is enabled and available*
+
+----
+[root@undercloud ~]# openstack baremetal driver list
++---------------------+------------------------+
+| Supported driver(s) | Active host(s)         |
++---------------------+------------------------+
+| ipmi                | undercloud.localdomain |
+| pxe_drac            | undercloud.localdomain |
+| pxe_ilo             | undercloud.localdomain |
+| pxe_ipmitool        | undercloud.localdomain |
+| pxe_ssh             | undercloud.localdomain |
++---------------------+------------------------+
+----
+
+*If you have power on/power off timeout problems in Ironic(https://access.redhat.com/solutions/2332151), increase the power_retry and power_wait parameters*
+
+----
+# Options defined in ironic.drivers.modules.ilo.power
+#
+
+# Number of times a power operation needs to be retried
+# (integer value)
+power_retry=6
+
+# Amount of time in seconds to wait in between power
+# operations (integer value)
+power_wait=20
+----
+
+*If using IPMI driver, and errors are seen check:*
+
+  -  Ipmitool is installed.
+  -  The IPMI controller on your bare metal server is turned on.
+  -  The IPMI controller credentials passed in the command are right.
+  -  The conductor node has a route to the IPMI controller. This can be checked by just pinging the IPMI controller IP from the conductor node.
+ 
+Also test that you can access the status of the BMC using the ipmitool command several times
+
+----
+ipmitool -I lanplus -H <ip-address> -U <username> -P <password> chassis power status
+----
+
+
+*slow or unresponsive BMCs in the environment* 
+
+the retry_timeout configuration option in the [ipmi] section may need to be increased. The default is fairly conservative, as setting this timeout too low can cause older BMCs to crash and require a hard-reset.
+
+----
+[root@undercloud ~]# more /etc/ironic/ironic.conf | grep ^retry_timeout
+retry_timeout = 15
+----
+
+*Check Bios config "Legacy" or "UEFI"*
+
+Out-of-the-box install of Red Hat OpenStack Platform 10 sets ironic.conf on the undercloud in default_boot_mode = bios
+
+The default state of the ironic.conf file on the undercloud is:
+
+----
+default_boot_mode = bios
+----
+
+If uefi boot is needed in introspection and deploy, change it to:
+
+----
+default_boot_mode = uefi
+----
+
+*DHCP info and debug for introspection*
+
+The introspection dhcp service uses dnsmasq:
+
+----
+[root@undercloud ~]# ps -ef | grep -i ironic-inspector | grep dns
+nobody    1310     1  0 Jun01 ?        00:00:00 /sbin/dnsmasq --conf-file=/etc/ironic-inspector/dnsmasq.conf
+----
+
+The conf file is in /etc/ironic-inspector/dnsmasq.conf, you can check interface and dhcp-range:
+
+----
+[root@undercloud ~]# cat /etc/ironic-inspector/dnsmasq.conf
+port=0
+interface=br-ctlplane
+bind-interfaces
+dhcp-range=10.0.0.100,10.0.0.120,29
+dhcp-sequential-ip
+dhcp-match=ipxe,175
+dhcp-match=set:efi,option:client-arch,7
+# Client is running iPXE; move to next stage of chainloading
+dhcp-boot=tag:ipxe,http://10.0.0.10:8088/inspector.ipxe
+# Client is running PXE over EFI; send EFI version of iPXE chainloader
+dhcp-boot=tag:efi,ipxe.efi
+# Client is running PXE over BIOS; send BIOS version of iPXE chainloader
+dhcp-boot=undionly.kpxe,localhost.localdomain,10.0.0.10
+----
+
+Use tcpdump on the provisioning interface:
+
+ [root@undercloud ~]# tcpdump -i <network-interface> port 67 or port 68 or port 69 -e -n
+
+Filter matching the client Mac address:
+
+ tcpdump -i br0 -vvv -s 1500 '((port 67 or port 68) and (udp[38:4] = 0x3e0ccf08))'
+
+Tcpdump filter to capture packets sent by the client (DISCOVER, REQUEST, INFORM):
+
+ tcpdump -i br0 -vvv -s 1500 '((port 67 or port 68) and (udp[8:1] = 0x1))'
+
+*If the Dhcp client isn't able to comunicate with the server, check that the client Mac is getting whitelisted in Iptables*
+
+We look for the the mac address of the overcloud node we are going to introspect, in this case the node uid is *50fd27b6-7af7-425e-94b2-f6fb0f9f5bfa* with mac *aa:bb:cc:dd:ee:01*
+
+ [root@undercloud ~]# openstack baremetal port list
++--------------------------------------+-------------------+
+| UUID                                 | Address           |
++--------------------------------------+-------------------+
+| 5da9df9d-adea-4d89-ade2-f083478cdfbf | aa:bb:cc:dd:ee:01 |
+| 3a2687cf-318b-4c80-bc18-01c20b49ed29 | aa:bb:cc:dd:ee:02 |
+| 04cf3e6a-c27f-4ce4-9719-93dfe82e48db | aa:bb:cc:dd:ee:03 |
+| 24b39ae8-1009-4d21-9269-683f010790bf | aa:bb:cc:dd:ee:04 |
++--------------------------------------+-------------------+
+[root@undercloud ~]# openstack baremetal port show 5da9df9d-adea-4d89-ade2-f083478cdfbf
++------------+--------------------------------------+
+| Field      | Value                                |
++------------+--------------------------------------+
+| address    | aa:bb:cc:dd:ee:01                    |
+| created_at | 2017-06-01T13:57:08+00:00            |
+| extra      | {}                                   |
+| node_uuid  | 50fd27b6-7af7-425e-94b2-f6fb0f9f5bfa |
+| updated_at | 2017-06-02T11:53:59+00:00            |
+| uuid       | 5da9df9d-adea-4d89-ade2-f083478cdfbf |
++------------+--------------------------------------+
+
+We now are going to run the introspection on that node and check the iptable rules, our mac is going to get white listed and removed from the macs with the DROP target
+
+ [root@undercloud ~]# iptables -nL | grep -A 2 "Chain ironic-inspector"
+Chain ironic-inspector (1 references)
+target     prot opt source               destination         
+REJECT     all  --  0.0.0.0/0            0.0.0.0/0            reject-with icmp-port-unreachable
+[root@undercloud ~]# openstack  baremetal introspection start 50fd27b6-7af7-425e-94b2-f6fb0f9f5bfa
+[root@undercloud ~]# iptables -nL | grep -B 2 -A 2 -i AA:BB
+Chain ironic-inspector (1 references)
+target     prot opt source               destination         
+DROP       all  --  0.0.0.0/0            0.0.0.0/0            MAC AA:BB:CC:DD:EE:04
+DROP       all  --  0.0.0.0/0            0.0.0.0/0            MAC AA:BB:CC:DD:EE:03
+DROP       all  --  0.0.0.0/0            0.0.0.0/0            MAC AA:BB:CC:DD:EE:02
+ACCEPT     all  --  0.0.0.0/0            0.0.0.0/0           
+
+We can also check in the logs the same process in the introspection logs
+
+ [root@undercloud ironic-inspector]# grep -i 'aa:bb:cc:dd:ee:01' ironic-inspector.log
+2017-06-07 16:48:49.196 7354 INFO ironic_inspector.introspect [-] [node: 50fd27b6-7af7-425e-94b2-f6fb0f9f5bfa state starting] Whitelisting MAC's [u'aa:bb:cc:dd:ee:01'] on the firewall
+2017-06-07 16:48:51.688 7354 INFO ironic_inspector.introspect [-] [node: 50fd27b6-7af7-425e-94b2-f6fb0f9f5bfa state starting] The following attributes will be used for look up: {u'mac': [u'aa:bb:cc:dd:ee:01']}
+
+
+== Deploy 
+'''
+
+=== Deploy recommendations
+
+*Try small scale deployment first*
+
+Try deployment with the smallest number of nodes possible,Single Controller, single Compute, single CephStorage, etc.
+
+*Deployment batches* 
+
+We recommend not deploying 32 nodes at a time. 32 is the typical amount you can fit within a 42 RU rack. Deploying 32 at a time also minimizes the debugging necessary to diagnose issues with the deployment.
+
+*Configure even unused NICs*
+
+Specify NIC configurations for network interfaces unused by OpenStack Define interfaces in YAML files in the nic-configs directory:
+
+ Set use_dhcp: false and defroute: false 
+
+*Power off unused nodes*
+
+Before redeployment, verify that unused nodes are OFF Use DRAC/iLO to check power state Do not relay on Ironic, We have seen cases where nodes from previous deployments which are now in maintenance, are left hanging around in a powered on state causing problems with ongoing deployments.
+
+=== Deploy Debug 
+
+In this context we consider deploy the Phase during wich the overcloud image is copied to the local overcloud nodes, this is done booting the undercloud nodes via ipxe to load a ramdisk, then exporting the local root disk as a iscsi target to the undercloud node, and then the overcloud image gets copied via dd
+
+*Deploy Logs*
+
+If the deploy fails during deploy the ironic-conductor.log should have the error
+
+----
+[root@undercloud ironic]# ls -l /var/log/ironic/ironic-conductor.log
+-rw-r--r--. 1 ironic ironic 288970 Jun  7 09:16 /var/log/ironic/ironic-conductor.log
+----
+
+If you need to check the ramdisk run log output, it is saved in  /var/log/ironic/deploy/ dir
+
+ [root@undercloud ironic]# ls -ld  /var/log/ironic/deploy/
+drwxr-xr-x. 2 ironic ironic 4096 Jun  5 02:48 /var/log/ironic/deploy/
+
+Inside the dir you can find a tarball named after the UID of the overcloud node, the journal file contais the output of the run
+
+ [root@undercloud ironic]# ls -l  /var/log/ironic/deploy/*tar.gz
+-rw-r--r--. 1 ironic ironic 17573 Jun  5 02:48 /var/log/ironic/deploy/d8ee5249-a016-444f-bd02-77e422332381_32068670-ef4e-4699-911f-6c0ed4da541c_2017-06-05-06:48:24.tar.gz
+-rw-r--r--. 1 ironic ironic 17806 Jun  5 02:48 /var/log/ironic/deploy/e4cf9855-392c-40be-92b6-9b10674373d0_d92dc0f2-d03c-4cf4-9d1e-36772055520a_2017-06-05-06:48:23.tar.gz
+[root@undercloud ironic]# tar -zxvf /var/log/ironic/deploy/d8ee5249-a016-444f-bd02-77e422332381_32068670-ef4e-4699-911f-6c0ed4da541c_2017-06-05-06:48:24.tar.gz && tail journal
+Jun 05 02:48:20 host-10-0-0-62 logger[2251]: 83haiku: debug: /dev/vda1 is not a BeFS partition: exiting
+Jun 05 02:48:20 host-10-0-0-62 logger[2251]: 50mounted-tests: debug: running subtest /usr/libexec/os-probes/mounted/90linux-distro
+Jun 05 02:48:20 host-10-0-0-62 logger[2251]: 50mounted-tests: debug: running subtest /usr/libexec/os-probes/mounted/90solaris
+Jun 05 02:48:20 host-10-0-0-62 logger[2251]: 50mounted-tests: debug: running subtest /usr/libexec/os-probes/mounted/efi
+Jun 05 02:48:21 host-10-0-0-62 ironic-python-agent[525]: 2017-06-05 02:48:21.149 525 INFO ironic_python_agent.extensions.image [-] GRUB2 successfully installed on /dev/vda
+Jun 05 02:48:21 host-10-0-0-62 kernel: XFS (vda2): Unmounting Filesystem
+Jun 05 02:48:21 host-10-0-0-62 ironic-python-agent[525]: 2017-06-05 02:48:21.285 525 INFO root [-] Command image.install_bootloader completed: Command name: install_bootloader, params: {u'efi_system_part_uuid': None, u'root_uuid': u'2a59886b-5268-41e5-b37f-c92611eabd96'}, status: SUCCEEDED, result: None.
+Jun 05 02:48:21 host-10-0-0-62 ironic-python-agent[525]: ::ffff:10.0.0.10 - - [05/Jun/2017 02:48:21] "POST /v1/commands?wait=true HTTP/1.1" 200 265
+Jun 05 02:48:23 host-10-0-0-62 NetworkManager[186]: <warn>  [1496645303.8756] dhcp4 (eth2): request timed out
+
+
+*Pxe boot Dnsmasq/dhcp for deployment*
+
+The dhcp deployment service is different from the introspection dhcp service, the deployment dnsmasq processes is running inside a namespace created by neutron, when the Ipxe boot starts you will see with ironic node-list the node in wait for callback state, if the node hangs in the wait for callback state the undercloud node is having issues booting ipxe using dhcp, a review of the boot proccess from the system Ilo/console is needed.
+
+ [root@undercloud ~]# ps -ef | grep -i dhcp-hostsfile
+nobody    4243     1  0 Jun01 ?        00:00:00 dnsmasq --no-hosts --no-resolv --strict-order --except-interface=lo --pid-file=/var/lib/neutron/dhcp/0ba89bb7-dccd-4001-bb12-5b53ed82c594/pid --dhcp-hostsfile=/var/lib/neutron/dhcp/0ba89bb7-dccd-4001-bb12-5b53ed82c594/host --addn-hosts=/var/lib/neutron/dhcp/0ba89bb7-dccd-4001-bb12-5b53ed82c594/addn_hosts --dhcp-optsfile=/var/lib/neutron/dhcp/0ba89bb7-dccd-4001-bb12-5b53ed82c594/opts --dhcp-leasefile=/var/lib/neutron/dhcp/0ba89bb7-dccd-4001-bb12-5b53ed82c594/leases --dhcp-match=set:ipxe,175 --bind-interfaces --interface=tap9fa1fa7b-14 --dhcp-range=set:tag0,10.0.0.0,static,86400s --dhcp-option-force=option:mtu,1500 --dhcp-lease-max=256 --conf-file=/etc/dnsmasq-ironic.conf
+
+ [root@undercloud ~]# ip netns
+qdhcp-0ba89bb7-dccd-4001-bb12-5b53ed82c594
+[root@undercloud ~]# ip netns exec qdhcp-0ba89bb7-dccd-4001-bb12-5b53ed82c594 ip a
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN qlen 1
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host 
+       valid_lft forever preferred_lft forever
+9: tap9fa1fa7b-14: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN qlen 1000
+    link/ether fa:16:3e:ae:bf:50 brd ff:ff:ff:ff:ff:ff
+    inet 10.0.0.50/24 brd 10.0.0.255 scope global tap9fa1fa7b-14
+       valid_lft forever preferred_lft forever
+    inet6 fe80::f816:3eff:feae:bf50/64 scope link 
+       valid_lft forever preferred_lft forever
+
+
+So if we want to Tcpdump is better if we do it inside the namespace using the tap device:
+
+ [root@undercloud ~]# ip netns exec qdhcp-0ba89bb7-dccd-4001-bb12-5b53ed82c594 tcpdump -i tap9fa1fa7b-14 -vvv -s 1500 '((port 67 or port 68))'
+
+When the undercloud is a virtual machine running on VMware ESXi, DHCP during Introspection is successful, but it fails during deployment. DHCP requests are being received on the tap device, but the offers are not received by the nodes Forged transmit has to be set to Accept so ESXi does not compare source and effective MAC addresses.  (https://access.redhat.com/solutions/1980283)
+
+*Populating the overcloud local disks with the overcloud image*
+
+When we run the overcloud deploy, and the ipxe boot has loaded the ramdisk, a iscsi target is created for the local root disk, from the journal of the deploy ram disk run for and overcloud node:
+
+ Jun 03 09:07:00 host-10-0-0-55 ironic-python-agent[528]: 2017-06-03 09:07:00.668 528 INFO ironic_python_agent.extensions.iscsi [-] Created iSCSI target with iqn iqn.2008-10.org.openstack:e4cf9855-392c-40be-92b6-9b10674373d0, portal port 3260, on device /dev/vda using linux-io
+Jun 03 09:07:00 host-10-0-0-55 ironic-python-agent[528]: 2017-06-03 09:07:00.669 528 INFO root [-] Command iscsi.start_iscsi_target completed: Command name: start_iscsi_target, params: {u'wipe_disk_metadata': True, u'iqn': u'iqn.2008-10.org.openstack:e4cf9855-392c-40be-92b6-9b10674373d0', u'portal_port': 3260}, status: SUCCEEDED, result: {'iscsi_target_iqn': u'iqn.2008-10.org.openstack:e4cf9855-392c-40be-92b6-9b10674373d0'}.
+Jun 03 09:07:00 host-10-0-0-55 ironic-python-agent[528]: ::ffff:10.0.0.10 - - [03/Jun/2017 09:07:00] "POST /v1/commands?wait=true HTTP/1.1" 200 386
+
+Now we can see the isci initiator in the undercloud node is connected to the target:
+
+ [root@undercloud ~]# iscsiadm -m session -P 2
+Target: iqn.2008-10.org.openstack:d8ee5249-a016-444f-bd02-77e422332381 (non-flash)
+	Current Portal: 10.0.0.52:3260,1
+	Persistent Portal: 10.0.0.52:3260,1
+		**********
+		Interface:
+		**********
+		Iface Name: default
+		Iface Transport: tcp
+		Iface Initiatorname: iqn.1994-05.com.redhat:10481c98aef
+		Iface IPaddress: 10.0.0.10
+		Iface HWaddress: <empty>
+		Iface Netdev: <empty>
+		SID: 10
+		iSCSI Connection State: LOGGED IN
+		iSCSI Session State: LOGGED_IN
+
+After this the copy of the undercloud image starts, if the dd process hangs and doesn't finish, load a live usb/iso on the overcloud node that is failing and test the root disk, do a local dd, check for PFAs in the SMART stats,etc.
+
+ [root@undercloud ~]# ps -ef | grep -i dd
+root      6715  1306  0 05:18 ?        00:00:00 sudo ironic-rootwrap /etc/ironic/rootwrap.conf dd if=/var/lib/ironic/images/e4cf9855-392c-40be-92b6-9b10674373d0/disk of=/dev/disk/by-path/ip-10.0.0.60:3260-iscsi-iqn.2008-10.org.openstack:e4cf9855-392c-40be-92b6-9b10674373d0-lun-1-part2 bs=1M oflag=direct
+root      6717  6715  0 05:18 ?        00:00:00 /usr/bin/python2 /usr/bin/ironic-rootwrap /etc/ironic/rootwrap.conf dd if=/var/lib/ironic/images/e4cf9855-392c-40be-92b6-9b10674373d0/disk of=/dev/disk/by-path/ip-10.0.0.60:3260-iscsi-iqn.2008-10.org.openstack:e4cf9855-392c-40be-92b6-9b10674373d0-lun-1-part2 bs=1M oflag=direct
+root      6719  6717  2 05:18 ?        00:00:00 /bin/dd if=/var/lib/ironic/images/e4cf9855-392c-40be-92b6-9b10674373d0/disk of=/dev/disk/by-path/ip-10.0.0.60:3260-iscsi-iqn.2008-10.org.openstack:e4cf9855-392c-40be-92b6-9b10674373d0-lun-1-part2 bs=1M oflag=direct
+
+*Overview of deploy stages in ironic nodes*
+
+When we first run the overcloud deploy command the ironic nodes go from active to deploying state
+
+ 2017-06-08 05:17:13.045 1306 INFO ironic.conductor.task_manager [req-a874331f-e318-40f3-8136-27acd0b0eb38 2d9df91b629246fbaf68145784156541 a0776ed8e5fb4c3e96647dca76ecfd4b - - -] Node e4cf9855-392c-40be-92b6-9b10674373d0 moved to provision state "deploying" from state "available"; target provision state is "active"
+
+
+Once the power state of the nodes goes from poweroff to poweron and the iPXE boot starts it changes to wait call-back
+
+ 2017-06-08 05:17:26.283 1306 INFO ironic.conductor.task_manager [req-a874331f-e318-40f3-8136-27acd0b0eb38 2d9df91b629246fbaf68145784156541 a0776ed8e5fb4c3e96647dca76ecfd4b - - -] Node e4cf9855-392c-40be-92b6-9b10674373d0 moved to provision state "wait call-back" from state "deploying"; target provision state is "active"
+
+When the ramdisk is booted correctly the state changes again to deploying 
+
+ 2017-06-08 05:18:04.809 1306 INFO ironic.conductor.task_manager [req-0526985b-6d49-4684-8d3f-ff446c399ce0 - - - - -] Node e4cf9855-392c-40be-92b6-9b10674373d0 moved to provision state "deploying" from state "wait call-back"; target provision state is "active"
+
+At this point the ram disk has booted and the iscsi target gets mapped to the undercloud, the dd proccess starts
+
+ 2017-06-08 05:18:07.979 1306 INFO ironic_lib.disk_utils [req-0526985b-6d49-4684-8d3f-ff446c399ce0 - - - - -] Disk metadata on /dev/disk/by-path/ip-10.0.0.60:3260-iscsi-iqn.2008-10.org.openstack:e4cf9855-392c-40be-92b6-9b10674373d0-lun-1 successfully destroyed for node e4cf9855-392c-40be-92b6-9b10674373d0
+2017-06-08 05:18:08.840 1306 INFO ironic_lib.disk_utils [req-0526985b-6d49-4684-8d3f-ff446c399ce0 - - - - -] Successfully completed the disk device /dev/disk/by-path/ip-10.0.0.60:3260-iscsi-iqn.2008-10.org.openstack:e4cf9855-392c-40be-92b6-9b10674373d0-lun-1 partitioning for node e4cf9855-392c-40be-92b6-9b10674373d0
+2017-06-08 05:18:09.435 1306 INFO ironic_lib.disk_utils [req-0526985b-6d49-4684-8d3f-ff446c399ce0 - - - - -] Configdrive for node e4cf9855-392c-40be-92b6-9b10674373d0 successfully copied onto partition /dev/disk/by-path/ip-10.0.0.60:3260-iscsi-iqn.2008-10.org.openstack:e4cf9855-392c-40be-92b6-9b10674373d0-lun-1-part1
+2017-06-08 05:19:37.241 1306 INFO ironic_lib.disk_utils [req-cd605464-c12c-4c58-9b8e-d33c109bd3ad - - - - -] Image for d8ee5249-a016-444f-bd02-77e422332381 successfully populated
+
+When the dd copy has finished and the overcloud image has been successfully populated, the server goes into active state in ironic, and the deploy phase finishes
+
+ 2017-06-08 05:19:59.857 1306 INFO ironic.conductor.task_manager [req-0526985b-6d49-4684-8d3f-ff446c399ce0 - - - - -] Node e4cf9855-392c-40be-92b6-9b10674373d0 moved to provision state "active" from state "deploying"; target provision state is "None"
+2017-06-08 05:19:59.859 1306 INFO ironic.drivers.modules.agent_base_vendor [req-0526985b-6d49-4684-8d3f-ff446c399ce0 - - - - -] Deployment to node e4cf9855-392c-40be-92b6-9b10674373d0 done
+
+*Check root device hints are working*
+
+
+
+
+
+== Overcloud Deploy
+'''
+
+TODO
+
+=== Overcloud templates
+
+*os-net-config github*
+
+The os-net-config github has a sample dir with all the combinations that are supported by os-net-config and you can use those examples directly in your net-config/ yaml templates
+http://git.openstack.org/cgit/openstack/os-net-config/tree/etc/os-net-config/samples
+
+=== Mistral Plans Debug
+
+*The Mistral log is very detailed and useful for in depth debugging*
+
+ tail -f /var/log/mistral/engine.log | grep "ERROR\|tripleo_common";
+
+*Checking Mitral with cli to spot Errors*
+
+ [root@undercloud ~]# mistral execution-list | grep "ERROR";
+# Grab the execution ID from above.
+[root@undercloud ~]# mistral execution-get $EXECUTION_ID
+[root@undercloud ~]# mistral execution-get-output $EXECUTION_ID
+# Also look at the actions
+[root@undercloud ~]# mistral action-execution-list
+[root@undercloud ~]# mistral action-execution-get-output $ACTION_ID
+
+Here is and example, we can check  the exection-list
+
+ [root@undercloud mistral]#  mistral execution-list 
++------------------------------+------------------------------+------------------------------+------------------------+------------------------------+---------+------------------------------+---------------------+---------------------+
+| ID                           | Workflow ID                  | Workflow name                | Description            | Task Execution ID            | State   | State info                   | Created at          | Updated at          |
++------------------------------+------------------------------+------------------------------+------------------------+------------------------------+---------+------------------------------+---------------------+---------------------+
+| 8aadba6c-a46d-4b87-aa0d-     | 1ab1c5d1-7408-40e3-b02d-     | tripleo.baremetal.v1.introsp |                        | <none>                       | SUCCESS | None                         | 2017-06-07 08:18:16 | 2017-06-07 09:19:20 |
+| d755981f2836                 | 35367fbb809e                 | ect_manageable_nodes         |                        |                              |         |                              |                     |                     |
+| 726a96c4-36f7-45ff-9795-b58a | e433d0eb-99cd-450a-a6ae-     | tripleo.baremetal.v1.introsp | sub-workflow execution | 9830243f-a701-48b1-8fcc-     | SUCCESS | None                         | 2017-06-07 08:18:18 | 2017-06-07 09:19:18 |
+| bcb93f17                     | 3d525401e368                 | ect                          |                        | 89c3fa2ac501                 |         |                              |                     |                     |
+
+And check the output using the Execution ID
+
+ [root@undercloud mistral]# mistral execution-get-output 726a96c4-36f7-45ff-9795-b58abcb93f17
+{
+    "status": "SUCCESS", 
+    "message": "Successfully introspected nodes.", 
+    "introspected_nodes": {
+        "ba4db2bf-c327-4fca-a37e-83cc17c1561a": {
+            "uuid": "ba4db2bf-c327-4fca-a37e-83cc17c1561a", 
+
+
+*Manually execute a workflow* 
+
+
+We can check all the triple workbooks 
+
+ [root@undercloud mistral]# mistral workbook-list
++----------------------------+--------+---------------------+------------+
+| Name                       | Tags   | Created at          | Updated at |
++----------------------------+--------+---------------------+------------+
+| tripleo.baremetal.v1       | <none> | 2017-06-01 13:54:18 | None       |
+| tripleo.deployment.v1      | <none> | 2017-06-01 13:54:21 | None       |
+| tripleo.package_update.v1  | <none> | 2017-06-01 13:54:23 | None       |
+| tripleo.plan_management.v1 | <none> | 2017-06-01 13:54:27 | None       |
+| tripleo.scale.v1           | <none> | 2017-06-01 13:54:28 | None       |
+| tripleo.stack.v1           | <none> | 2017-06-01 13:54:30 | None       |
+| tripleo.validations.v1     | <none> | 2017-06-01 13:54:34 | None       |
++----------------------------+--------+---------------------+------------+
+
+With workflow list, we can check all the workflows for a workbook
+
+ [root@undercloud mistral]#  mistral workflow-list | grep "tripleo.baremetal.v1"  | awk -F "|" '{ print $3 }'
+ tripleo.baremetal.v1.introspect_manageable_nodes          
+ tripleo.baremetal.v1.set_node_state                       
+ tripleo.baremetal.v1.manage                               
+ tripleo.baremetal.v1.create_raid_configuration            
+ tripleo.baremetal.v1.manual_cleaning                      
+ tripleo.baremetal.v1.tag_nodes                            
+ tripleo.baremetal.v1.provide                              
+ tripleo.baremetal.v1.register_or_update                   
+ tripleo.baremetal.v1.cellv2_discovery                     
+ tripleo.baremetal.v1.configure_manageable_nodes           
+ tripleo.baremetal.v1.tag_node                             
+ tripleo.baremetal.v1.set_power_state                      
+ tripleo.baremetal.v1.provide_manageable_nodes             
+ tripleo.baremetal.v1.configure                            
+ tripleo.baremetal.v1.introspect 
+
+We can then use the mistral workflow-get command to se the input parameters needed by the workflow, we are going to use the tripleo.baremetal.v1.provide_manageable_nodes , this simply list ironic nodes in manageable state
+
+ [root@undercloud mistral]# mistral workflow-get tripleo.baremetal.v1.provide_manageable_nodes
++------------+-----------------------------------------------+
+| Field      | Value                                         |
++------------+-----------------------------------------------+
+| ID         | b9977a5c-2f04-40cf-9104-ea1733bb0d45          |
+| Name       | tripleo.baremetal.v1.provide_manageable_nodes |
+| Project ID | 143c2579d1d749308f92033209fc79c5              |
+| Tags       | <none>                                        |
+| Input      | queue_name=tripleo                            |
+| Created at | 2017-06-01 13:54:18                           |
+| Updated at | None                                          |
++------------+-----------------------------------------------+
+
+And you can execute the workflow 
+
+ [root@undercloud mistral]# mistral execution-create  tripleo.baremetal.v1.provide_manageable_nodes '{"queue_name": "tripleo"}'
++-------------------+-----------------------------------------------+
+| Field             | Value                                         |
++-------------------+-----------------------------------------------+
+| ID                | c6212165-fb42-4a83-8074-05496866bb8e          |
+| Workflow ID       | b9977a5c-2f04-40cf-9104-ea1733bb0d45          |
+| Workflow name     | tripleo.baremetal.v1.provide_manageable_nodes |
+| Description       |                                               |
+| Task Execution ID | <none>                                        |
+| State             | RUNNING                                       |
+| State info        | None                                          |
+| Created at        | 2017-06-08 21:25:41                           |
+| Updated at        | 2017-06-08 21:25:41                           |
++-------------------+-----------------------------------------------+
+
+With the ID we can see the execution list and get the output
+
+ [root@undercloud mistral]# mistral execution-list | grep c6212165-fb42-4a83-8074-05496866bb8e
+| c6212165-fb42-4a83-8074-05496866bb8e | b9977a5c-2f04-40cf-9104-ea1733bb0d45 | tripleo.baremetal.v1.provide_manageable_nodes           |                        | <none>                               | SUCCESS | None                         | 2017-06-08 21:25:41 | 2017-06-08 21:26:05 |
+[root@undercloud mistral]# mistral execution-get-output c6212165-fb42-4a83-8074-05496866bb8e
+{
+    "managed_nodes": [
+        "50fd27b6-7af7-425e-94b2-f6fb0f9f5bfa", 
+        "ba4db2bf-c327-4fca-a37e-83cc17c1561a"
+    ], 
+    "status": "SUCCESS"
+}
+
+
+*You can re-run failed mistral tasks using*
+
+ [root@undercloud mistral]#  mistral task-list;
+# Find the ID for the failed task.
+[root@undercloud mistral]#  mistral task-rerun $ID;
+
+*Get your overcloud passwords from mistral*
+
+A plan is the combination of a as a Swift container + Mistral environment. 
+
+In swift we have the templates we provided:
+
+ [root@undercloud mistral]# swift list overcloud | grep net-config
+ci/common/net-config-multinode-os-net-config.yaml
+ci/common/net-config-multinode.yaml
+firstboot/os-net-config-mappings.yaml
+net-config-bond.yaml
+net-config-bridge.yaml
+net-config-linux-bridge.yaml
+net-config-noop.yaml
+net-config-static-bridge-with-external-dhcp.yaml
+net-config-static-bridge.yaml
+net-config-static.yaml
+net-config-undercloud.yaml
+network/scripts/run-os-net-config.sh
+
+In the mistral enviroment we can find variables includinf the default passwords:
+
+ [root@undercloud mistral]# mistral environment-get overcloud
++-------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Field       | Value                                                                                                                                                                                                                         |
++-------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Name        | overcloud                                                                                                                                                                                                                     |
+| Description | <none>                                                                                                                                                                                                                        |
+| Variables   | {                                                                                                                                                                                                                             |
+|             |     "parameter_defaults": {                                                                                                                                                                                                   |
+|             |         "ControllerCount": 1,                                                                                                                                                                                                 |
+|             |         "NovaComputeLibvirtType": "qemu",                                                                                                                                                                                     |
+|             |         "NtpServer": "95.81.173.74",                                                                                                                                                                                          |
+|             |         "ComputeCount": 1,                                                                                                                                                                                                    |
+|             |         "StackAction": "CREATE",                                                                                                                                                                                              |
+|             |         "OvercloudComputeFlavor": "compute",                                                                                                                                                                                  |
+|             |         "OvercloudControlFlavor": "control",                                                                                                                                                                                  |
+|             |         "UpdateIdentifier": ""                                                                                                                                                                                                |
+|             |     },                                                                                                                                                                                                                        |
+|             |     "passwords": {                                                                                                                                                                                                            |
+|             |         "KeystoneFernetKey1": "cbTCTW5nGP-8u7x9jw6ti9_t65YUsByy8EBdw3XkNao=",                                                                                                                                                 |
+|             |         "KeystoneFernetKey0": "xbwAGJ_-Y-LVbIcH9PlNiCVb4NT_5EyfG0rRoVXOkDM=",                                                                                                                                                 |
+|             |         "HAProxyStatsPassword": "EdDx72ybkwDw4b2KM3tkdN7bT",                                                                                                                                                                  |
+|             |         "HeatPassword": "dUR9C9Qy4eBxgD82usZhvGFsD",                                                                                                                                                                          |
+|             |         "KeystoneCredential1": "h7AQ-HYvOFzpU7Lxb2bFywYkEkK3l9dJDRXFw1Kl7xI=",                                                                                                                                                |
+|             |         "CongressPassword": "pKNBHNWrxsRpjVpRJYgcjMwgp",                                                                                                                                                                      |
+|             |         "NeutronPassword": "YPDgACsfmN4uGHcnzebc3rEJv",                                                                                                                                                                       |
+|             |         "SnmpdReadonlyUserPassword": "bcc0f245d947ea6b62eea3aa63bdbfb3380ff0b5",                                                                                                                                              |
+|             |         "GlancePassword": "Nwy9PbgccFv7K2AFpjfQs9tG8",                                                                                                                                                                        |
+|             |         "AdminPassword": "YjrqYfGvhfpmatkzpHD9R9myj",                                                                                                                                                                         |
+|             |         "IronicPassword": "KhKes3scq9tEd9B3GPf37jRTr",                                                                                                                                                                        |
+|             |         "HeatStackDomainAdminPassword": "VkE48BwexxcCZXM9DR4putAPT",                                                                                                                                                          |
+|             |         "ZaqarPassword": "F86nYgsqmHbedfMfReUJXpVra",                                                                                                                                                                         |
+
+
+
+*Mistral By Example: Full overcloud install using Mistral*
+
+http://tripleo.org/mistral-api/mistral-api.html
+
+
+
+
+TODO
+
+=== Overcloud Deploy Debug
+
+TODO
+
