@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="generator" content="Asciidoctor 1.5.4">
 <title>Tripleo/Director Debugging</title>
-<link href="https://fonts.googleapis.com/css?family=Ubuntu" rel="stylesheet">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:300,300italic,400,400italic,600,600italic%7CNoto+Serif:400,400italic,700,700italic%7CDroid+Sans+Mono:400,700">
 <style>
 /* Asciidoctor default stylesheet | MIT License | http://asciidoctor.org */
 /* Remove comment around @import statement below when using as a custom stylesheet */
@@ -427,6 +427,7 @@ body.book #toc,body.book #preamble,body.book h1.sect0,body.book .sect1>h2{page-b
 <ul class="sectlevel2">
 <li><a href="#_undercloud_install_recommendations">Undercloud install Recommendations</a></li>
 <li><a href="#_undercloud_install_debug">Undercloud install Debug</a></li>
+<li><a href="#_enrolling_overcloud">Enrolling overcloud</a></li>
 </ul>
 </li>
 <li><a href="#_introspection">Introspection</a>
@@ -435,10 +436,10 @@ body.book #toc,body.book #preamble,body.book h1.sect0,body.book .sect1>h2{page-b
 <li><a href="#_introspection_debug">Introspection Debug</a></li>
 </ul>
 </li>
-<li><a href="#_deploy">Deploy</a>
+<li><a href="#_deploy_provsion_phase">Deploy/Provsion phase</a>
 <ul class="sectlevel2">
-<li><a href="#_deploy_recommendations">Deploy recommendations</a></li>
-<li><a href="#_deploy_debug">Deploy Debug</a></li>
+<li><a href="#_deploy_phase_recommendations">Deploy phase recommendations</a></li>
+<li><a href="#_deploy_phase_debug">Deploy phase Debug</a></li>
 </ul>
 </li>
 <li><a href="#_overcloud_deploy">Overcloud Deploy</a>
@@ -515,6 +516,48 @@ rpc_response_timeout = 600</pre>
 <h3 id="_undercloud_install_debug">Undercloud install Debug</h3>
 <div class="paragraph">
 <p>TODO!!</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_enrolling_overcloud">Enrolling overcloud</h3>
+<div class="paragraph">
+<p>When enrolling overcloud nodes with the import command, the ironic driver tests the connectivity with the Ilo/drac</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre>[stack@undercloud ~]$ openstack baremetal import --json ~/instackenv.json</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>If the command takes a long time to finish and the nodes are in enroll state</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> [stack@undercloud conf.d]$ openstack baremetal list
+This command is deprecated. Instead, use 'openstack baremetal node list'.
++--------------------------------------+------+---------------+-------------+--------------------+-------------+
+| UUID                                 | Name | Instance UUID | Power State | Provisioning State | Maintenance |
++--------------------------------------+------+---------------+-------------+--------------------+-------------+
+| 149a4a65-739c-4599-823c-cf0c6dbcd37c | None | None          | None        | enroll             | False       |
+| 82079e5a-b02e-443c-bf6b-51b4cb6b149f | None | None          | None        | enroll             | False       |
+| ac0b308f-15bd-43f2-8aaa-fc9c872c0343 | None | None          | None        | enroll             | False       |
+| 6a05da8a-5963-4a19-a419-e71ef684e3e9 | None | None          | None        | enroll             | False       |
++--------------------------------------+------+---------------+-------------+--------------------+-------------+</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Check the ironic-conductor.log for problems comunicating the IPMI/ilo/drac BMC platforms:</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> 2017-06-11 10:27:14.977 10009 ERROR ironic.conductor.manager [req-afc9a72c-58bf-4fd0-a23d-d8d43905bbde - - - - -] Failed to validate power driver interface for node 149a4a65-739c-4599-823c-cf0c6dbcd37c. Error: SSH connection cannot be established: Failed to establish SSH connection to host 192.168.101.1.
+2017-06-11 10:27:14.984 10009 ERROR ironic.conductor.manager [req-f614ec7f-e7f0-4231-97b7-65ee3f248110 - - - - -] Failed to validate power driver interface for node 6a05da8a-5963-4a19-a419-e71ef684e3e9. Error: SSH connection cannot be established: Failed to establish SSH connection to host 192.168.101.1.
+2017-06-11 10:27:15.227 10009 ERROR ironic.conductor.manager [req-bde5bf5c-e89b-4cc5-89f8-c857f8392e41 - - - - -] Failed to validate power driver interface for node ac0b308f-15bd-43f2-8aaa-fc9c872c0343. Error: SSH connection cannot be established: Failed to establish SSH connection to host 192.168.101.1.
+2017-06-11 10:27:15.232 10009 ERROR ironic.conductor.manager [req-987d2ef5-129d-401d-9c8c-ff3a856b9fb1 - - - - -] Failed to validate power driver interface for node 82079e5a-b02e-443c-bf6b-51b4cb6b149f. Error: SSH connection cannot be established: Failed to establish SSH connection to host 192.168.101.1.</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Fix the problem with the BMC connection, and rerun the baremetal import command again</p>
 </div>
 </div>
 </div>
@@ -803,10 +846,10 @@ dhcp-boot=undionly.kpxe,localhost.localdomain,10.0.0.10</pre>
 </div>
 </div>
 <div class="paragraph">
-<p><strong>If the Dhcp client isn&#8217;t able to comunicate with the server, check that the client Mac is getting whitelisted in Iptables</strong></p>
+<p><strong>If the Dhcp client isn&#8217;t able to comunicate with the Dhcp server</strong></p>
 </div>
 <div class="paragraph">
-<p>We look for the the mac address of the overcloud node we are going to introspect, in this case the node uid is <strong>50fd27b6-7af7-425e-94b2-f6fb0f9f5bfa</strong> with mac <strong>aa:bb:cc:dd:ee:01</strong></p>
+<p>Check that the client Mac is getting whitelisted in Iptables, We can look for the the mac address of the overcloud node that we are going to introspect, in this case the node uid is <strong>50fd27b6-7af7-425e-94b2-f6fb0f9f5bfa</strong> with mac <strong>aa:bb:cc:dd:ee:01</strong></p>
 </div>
 <div class="literalblock">
 <div class="content">
@@ -865,11 +908,11 @@ ACCEPT     all  --  0.0.0.0/0            0.0.0.0/0</pre>
 </div>
 </div>
 <div class="sect1">
-<h2 id="_deploy">Deploy</h2>
+<h2 id="_deploy_provsion_phase">Deploy/Provsion phase</h2>
 <div class="sectionbody">
 <hr>
 <div class="sect2">
-<h3 id="_deploy_recommendations">Deploy recommendations</h3>
+<h3 id="_deploy_phase_recommendations">Deploy phase recommendations</h3>
 <div class="paragraph">
 <p><strong>Try small scale deployment first</strong></p>
 </div>
@@ -877,7 +920,7 @@ ACCEPT     all  --  0.0.0.0/0            0.0.0.0/0</pre>
 <p>Try deployment with the smallest number of nodes possible,Single Controller, single Compute, single CephStorage, etc.</p>
 </div>
 <div class="paragraph">
-<p><strong>Deployment batches</strong></p>
+<p><strong>Fixed sized Deployment batches</strong></p>
 </div>
 <div class="paragraph">
 <p>We recommend not deploying 32 nodes at a time. 32 is the typical amount you can fit within a 42 RU rack. Deploying 32 at a time also minimizes the debugging necessary to diagnose issues with the deployment.</p>
@@ -901,7 +944,7 @@ ACCEPT     all  --  0.0.0.0/0            0.0.0.0/0</pre>
 </div>
 </div>
 <div class="sect2">
-<h3 id="_deploy_debug">Deploy Debug</h3>
+<h3 id="_deploy_phase_debug">Deploy phase Debug</h3>
 <div class="paragraph">
 <p>In this context we consider deploy the Phase during wich the overcloud image is copied to the local overcloud nodes, this is done booting the undercloud nodes via ipxe to load a ramdisk, then exporting the local root disk as a iscsi target to the undercloud node, and then the overcloud image gets copied via dd</p>
 </div>
@@ -947,7 +990,7 @@ Jun 05 02:48:23 host-10-0-0-62 NetworkManager[186]: &lt;warn&gt;  [1496645303.87
 </div>
 </div>
 <div class="paragraph">
-<p><strong>Pxe boot Dnsmasq/dhcp for deployment</strong></p>
+<p><strong>PXE booting in the Deployment Phase</strong></p>
 </div>
 <div class="paragraph">
 <p>The dhcp deployment service is different from the introspection dhcp service, the deployment dnsmasq processes is running inside a namespace created by neutron, when the Ipxe boot starts you will see with ironic node-list the node in wait for callback state, if the node hangs in the wait for callback state the undercloud node is having issues booting ipxe using dhcp, a review of the boot proccess from the system Ilo/console is needed.</p>
@@ -1036,7 +1079,7 @@ root      6719  6717  2 05:18 ?        00:00:00 /bin/dd if=/var/lib/ironic/image
 </div>
 </div>
 <div class="paragraph">
-<p><strong>Overview of deploy stages in ironic nodes</strong></p>
+<p><strong>Overview of the deploy stages trough Ironic node states</strong></p>
 </div>
 <div class="paragraph">
 <p>When we first run the overcloud deploy command the ironic nodes go from active to deploying state</p>
@@ -1347,7 +1390,851 @@ network/scripts/run-os-net-config.sh</pre>
 <div class="sect2">
 <h3 id="_overcloud_deploy_debug">Overcloud Deploy Debug</h3>
 <div class="paragraph">
-<p>TODO</p>
+<p><strong>Follow the error in heat</strong></p>
+</div>
+<div class="paragraph">
+<p>Following an error on the overcloud stack list, we first check that the overcloud stack has failed</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> [stack@undercloud ~]$ heat stack-list
+WARNING (shell) "heat stack-list" is deprecated, please use "openstack stack list" instead
++--------------------------------------+------------+---------------+----------------------+--------------+
+| id                                   | stack_name | stack_status  | creation_time        | updated_time |
++--------------------------------------+------------+---------------+----------------------+--------------+
+| a7681ece-034d-4fba-8874-7803601b9507 | overcloud  | CREATE_FAILED | 2017-06-12T13:34:13Z | None         |
++--------------------------------------+------------+---------------+----------------------+--------------+</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>We can then list the resources of the stack, the compute resource group has failed</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> [stack@undercloud ~]$  openstack stack resource list overcloud | grep -i Failed
+| Compute                                   | 6f30d573-685b-468d-b225-fdba504f2533         | OS::Heat::ResourceGroup                         | CREATE_FAILED   | 2017-06-12T13:34:13Z |</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>We can dig in deeper, going into the nested stacks, we can see that the node that has failed is compute node 0</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> [stack@undercloud ~]$ openstack stack resource list 6f30d573-685b-468d-b225-fdba504f2533 | grep FAILED
+| 0             | f9c1c76e-f7a7-4770-9bd0-a4c49e480d84 | OS::TripleO::Compute | CREATE_FAILED   | 2017-06-12T13:34:53Z |</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>If we check in the compute 0 stack, we can see we have to failed SoftwareDeployment resources</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> [stack@undercloud ~]$ openstack stack resource list  f9c1c76e-f7a7-4770-9bd0-a4c49e480d84 | grep FAILED
+| NetworkDeployment     | 3fcbbf55-1238-4d36-9539-53e40ef2e136 | OS::TripleO::SoftwareDeployment              | CREATE_FAILED   | 2017-06-12T13:34:54Z |
+| UpdateDeployment      | d7fc1305-9b55-4afb-8612-db2917b11505 | OS::Heat::SoftwareDeployment                 | CREATE_FAILED   | 2017-06-12T13:34:54Z |</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>We can get this info in 1 command using the nested depth option on the cli</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> [stack@undercloud ~]$ openstack stack resource list -n5 overcloud | grep FAILED
+| Compute                                   | 6f30d573-685b-468d-b225-fdba504f2533                                            | OS::Heat::ResourceGroup                                                                                             | CREATE_FAILED   | 2017-06-12T13:34:13Z | overcloud                                                                                                            |
+| 0                                         | f9c1c76e-f7a7-4770-9bd0-a4c49e480d84                                            | OS::TripleO::Compute                                                                                                | CREATE_FAILED   | 2017-06-12T13:34:53Z | overcloud-Compute-f7gr76kpxqaz                                                                                       |
+| UpdateDeployment                          | d7fc1305-9b55-4afb-8612-db2917b11505                                            | OS::Heat::SoftwareDeployment                                                                                        | CREATE_FAILED   | 2017-06-12T13:34:54Z | overcloud-Compute-f7gr76kpxqaz-0-h42tisowbbuu                                                                        |
+| NetworkDeployment                         | 3fcbbf55-1238-4d36-9539-53e40ef2e136                                            | OS::TripleO::SoftwareDeployment                                                                                     | CREATE_FAILED   | 2017-06-12T13:34:54Z | overcloud-Compute-f7gr76kpxqaz-0-h42tisowbbuu                                                                        |</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Once we know where the error is, we can use resource show to check the attributes</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> [stack@undercloud ~]$ openstack stack resource list overcloud | grep -i failed
+| Compute                                   | 6f30d573-685b-468d-b225-fdba504f2533         | OS::Heat::ResourceGroup                         | CREATE_FAILED   | 2017-06-12T13:34:13Z |
+[stack@undercloud ~]$ openstack stack resource list 6f30d573-685b-468d-b225-fdba504f2533
++---------------+--------------------------------------+----------------------+-----------------+----------------------+
+| resource_name | physical_resource_id                 | resource_type        | resource_status | updated_time         |
++---------------+--------------------------------------+----------------------+-----------------+----------------------+
+| 0             | f9c1c76e-f7a7-4770-9bd0-a4c49e480d84 | OS::TripleO::Compute | CREATE_FAILED   | 2017-06-12T13:34:53Z |
++---------------+--------------------------------------+----------------------+-----------------+----------------------+</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>With resource show we have to specify the stack(can be nested) and the resource name, in this example the stack id is the compute resource-id that we get from the previous command</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> [stack@undercloud ~]$ openstack stack resource show 6f30d573-685b-468d-b225-fdba504f2533 0
++------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Field                  | Value                                                                                                                                                                                                              |
++------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| attributes             | {u'storage_mgmt_ip_address': u'10.0.0.59', u'nova_server_resource': u'c05fc792-3807-4bd0-becd-d7fc5035474b', u'hostname': u'overcloud-compute-0', u'tenant_ip_address': u'192.168.3.154', u'external_ip_address':  |
+|                        | u'10.0.0.59', u'known_hosts_entry': u'192.168.2.154,overcloud-compute-0.liquid.zz,overcloud-compute-0,10.0.0.59,overcloud-compute-0.external.liquid.zz,overcloud-compute-0.external,192.168.2.154,overcloud-       |
+|                        | compute-0.internalapi.liquid.zz,overcloud-compute-0.internalapi,172.16.1.12,overcloud-compute-0.storage.liquid.zz,overcloud-compute-0.storage,10.0.0.59,overcloud-compute-0.storagemgmt.liquid.zz,overcloud-       |
+|                        | compute-0.storagemgmt,192.168.3.154,overcloud-compute-0.tenant.liquid.zz,overcloud-compute-0.tenant,10.0.0.59,overcloud-compute-0.management.liquid.zz,overcloud-compute-0.management,10.0.0.59,overcloud-         |
+|                        | compute-0.ctlplane.liquid.zz,overcloud-compute-0.ctlplane ', u'hosts_entry': u'192.168.2.154 overcloud-compute-0.liquid.zz overcloud-compute-0\n10.0.0.59 overcloud-compute-0.external.liquid.zz overcloud-        |
+|                        | compute-0.external\n192.168.2.154 overcloud-compute-0.internalapi.liquid.zz overcloud-compute-0.internalapi\n172.16.1.12 overcloud-compute-0.storage.liquid.zz overcloud-compute-0.storage\n10.0.0.59 overcloud-   |
+|                        | compute-0.storagemgmt.liquid.zz overcloud-compute-0.storagemgmt\n192.168.3.154 overcloud-compute-0.tenant.liquid.zz overcloud-compute-0.tenant\n10.0.0.59 overcloud-compute-0.management.liquid.zz overcloud-      |
+|                        | compute-0.management\n10.0.0.59 overcloud-compute-0.ctlplane.liquid.zz overcloud-compute-0.ctlplane\n', u'storage_ip_address': u'172.16.1.12', u'hostname_map': {u'management': u'overcloud-                       |
+|                        | compute-0.management.liquid.zz', u'storage': u'overcloud-compute-0.storage.liquid.zz', u'ctlplane': u'overcloud-compute-0.ctlplane.liquid.zz', u'external': u'overcloud-compute-0.external.liquid.zz',             |
+|                        | u'internal_api': u'overcloud-compute-0.internalapi.liquid.zz', u'storage_mgmt': u'overcloud-compute-0.storagemgmt.liquid.zz', u'tenant': u'overcloud-compute-0.tenant.liquid.zz'}, u'internal_api_ip_address':     |
+|                        | u'192.168.2.154', u'ip_address': u'10.0.0.59', u'management_ip_address': u'10.0.0.59'}                                                                                                                             |
+| creation_time          | 2017-06-12T13:34:53Z                                                                                                                                                                                               |
+| description            |                                                                                                                                                                                                                    |
+| links                  | [{u'href': u'http://10.0.0.10:8004/v1/e6128b61cf7a4169a8f61cdf41a27344/stacks/overcloud-Compute-f7gr76kpxqaz/6f30d573-685b-468d-b225-fdba504f2533/resources/0', u'rel': u'self'}, {u'href':                        |
+|                        | u'http://10.0.0.10:8004/v1/e6128b61cf7a4169a8f61cdf41a27344/stacks/overcloud-Compute-f7gr76kpxqaz/6f30d573-685b-468d-b225-fdba504f2533', u'rel': u'stack'}, {u'href':                                              |
+|                        | u'http://10.0.0.10:8004/v1/e6128b61cf7a4169a8f61cdf41a27344/stacks/overcloud-Compute-f7gr76kpxqaz-0-h42tisowbbuu/f9c1c76e-f7a7-4770-9bd0-a4c49e480d84', u'rel': u'nested'}]                                        |
+| logical_resource_id    | 0                                                                                                                                                                                                                  |
+| parent_resource        | Compute                                                                                                                                                                                                            |
+| physical_resource_id   | f9c1c76e-f7a7-4770-9bd0-a4c49e480d84                                                                                                                                                                               |
+| required_by            | []                                                                                                                                                                                                                 |
+| resource_name          | 0                                                                                                                                                                                                                  |
+| resource_status        | CREATE_FAILED                                                                                                                                                                                                      |
+| resource_status_reason | CREATE aborted                                                                                                                                                                                                     |
+| resource_type          | OS::TripleO::Compute                                                                                                                                                                                               |
+| updated_time           | 2017-06-12T13:34:53Z                                                                                                                                                                                               |
++------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Looking at the attributes of the previous command we can see something strange is going on, we have several ip definitions with the same IP: storage_mgmt_ip_address': u'10.0.0.59, external_ip_address: u'10.0.0.59'</p>
+</div>
+<div class="paragraph">
+<p>We can still try and get more info from the resources in the last stack:</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> [stack@undercloud ~]$ openstack stack resource list f9c1c76e-f7a7-4770-9bd0-a4c49e480d84 | grep FAILED
++-----------------------+--------------------------------------+----------------------------------------------+-----------------+----------------------+
+| resource_name         | physical_resource_id                 | resource_type                                | resource_status | updated_time         |
++-----------------------+--------------------------------------+----------------------------------------------+-----------------+----------------------+
+| NetworkDeployment     | 3fcbbf55-1238-4d36-9539-53e40ef2e136 | OS::TripleO::SoftwareDeployment              | CREATE_FAILED   | 2017-06-12T13:34:54Z |
+| UpdateDeployment      | d7fc1305-9b55-4afb-8612-db2917b11505 | OS::Heat::SoftwareDeployment                 | CREATE_FAILED   | 2017-06-12T13:34:54Z |
++-----------------------+--------------------------------------+----------------------------------------------+-----------------+----------------------+
+[stack@undercloud ~]$ openstack stack resource show f9c1c76e-f7a7-4770-9bd0-a4c49e480d84 NetworkDeployment
++------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Field                  | Value                                                                                                                                                                                                              |
++------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| attributes             | {u'deploy_stdout': None, u'deploy_stderr': None, u'deploy_status_code': None}                                                                                                                                      |
+| creation_time          | 2017-06-12T13:34:54Z                                                                                                                                                                                               |
+| description            |                                                                                                                                                                                                                    |
+| links                  | [{u'href': u'http://10.0.0.10:8004/v1/e6128b61cf7a4169a8f61cdf41a27344/stacks/overcloud-Compute-f7gr76kpxqaz-0-h42tisowbbuu/f9c1c76e-f7a7-4770-9bd0-a4c49e480d84/resources/NetworkDeployment', u'rel': u'self'},   |
+|                        | {u'href': u'http://10.0.0.10:8004/v1/e6128b61cf7a4169a8f61cdf41a27344/stacks/overcloud-Compute-f7gr76kpxqaz-0-h42tisowbbuu/f9c1c76e-f7a7-4770-9bd0-a4c49e480d84', u'rel': u'stack'}]                               |
+| logical_resource_id    | NetworkDeployment                                                                                                                                                                                                  |
+| parent_resource        | 0                                                                                                                                                                                                                  |
+| physical_resource_id   | 3fcbbf55-1238-4d36-9539-53e40ef2e136                                                                                                                                                                               |
+| required_by            | [u'NovaComputeDeployment']                                                                                                                                                                                         |
+| resource_name          | NetworkDeployment                                                                                                                                                                                                  |
+| resource_status        | CREATE_FAILED                                                                                                                                                                                                      |
+| resource_status_reason | CREATE aborted                                                                                                                                                                                                     |
+| resource_type          | OS::TripleO::SoftwareDeployment                                                                                                                                                                                    |
+| updated_time           | 2017-06-12T13:34:54Z                                                                                                                                                                                               |
++------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+[stack@undercloud ~]$ openstack stack resource show f9c1c76e-f7a7-4770-9bd0-a4c49e480d84 UpdateDeployment
++------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Field                  | Value                                                                                                                                                                                                              |
++------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| attributes             | {u'deploy_stdout': None, u'deploy_stderr': None, u'deploy_status_code': None}                                                                                                                                      |
+| creation_time          | 2017-06-12T13:34:54Z                                                                                                                                                                                               |
+| description            |                                                                                                                                                                                                                    |
+| links                  | [{u'href': u'http://10.0.0.10:8004/v1/e6128b61cf7a4169a8f61cdf41a27344/stacks/overcloud-Compute-f7gr76kpxqaz-0-h42tisowbbuu/f9c1c76e-f7a7-4770-9bd0-a4c49e480d84/resources/UpdateDeployment', u'rel': u'self'},    |
+|                        | {u'href': u'http://10.0.0.10:8004/v1/e6128b61cf7a4169a8f61cdf41a27344/stacks/overcloud-Compute-f7gr76kpxqaz-0-h42tisowbbuu/f9c1c76e-f7a7-4770-9bd0-a4c49e480d84', u'rel': u'stack'}]                               |
+| logical_resource_id    | UpdateDeployment                                                                                                                                                                                                   |
+| parent_resource        | 0                                                                                                                                                                                                                  |
+| physical_resource_id   | d7fc1305-9b55-4afb-8612-db2917b11505                                                                                                                                                                               |
+| required_by            | [u'NovaComputeDeployment']                                                                                                                                                                                         |
+| resource_name          | UpdateDeployment                                                                                                                                                                                                   |
+| resource_status        | CREATE_FAILED                                                                                                                                                                                                      |
+| resource_status_reason | CREATE aborted                                                                                                                                                                                                     |
+| resource_type          | OS::Heat::SoftwareDeployment                                                                                                                                                                                       |
+| updated_time           | 2017-06-12T13:34:54Z                                                                                                                                                                                               |</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>We can also use the deploy show to get output of the failed command, here we can see as input valus the configuration of the br-ex bridge with nic1</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> [stack@undercloud ~]$ heat resource-list -n5 overcloud | grep SoftwareDeployment | grep CREATE_FAILED
+WARNING (shell) "heat resource-list" is deprecated, please use "openstack stack resource list" instead
+| NetworkDeployment                         | 3fcbbf55-1238-4d36-9539-53e40ef2e136                                            | OS::TripleO::SoftwareDeployment                                                                                     | CREATE_FAILED   | 2017-06-12T13:34:54Z | overcloud-Compute-f7gr76kpxqaz-0-h42tisowbbuu                                                                        |
+| UpdateDeployment                          | d7fc1305-9b55-4afb-8612-db2917b11505                                            | OS::Heat::SoftwareDeployment                                                                                        | CREATE_FAILED   | 2017-06-12T13:34:54Z | overcloud-Compute-f7gr76kpxqaz-0-h42tisowbbuu                                                                        |
+[stack@undercloud ~]$ heat deployment-show 3fcbbf55-1238-4d36-9539-53e40ef2e136
+WARNING (shell) "heat deployment-show" is deprecated, please use "openstack software deployment show" instead
+{
+  "status": "IN_PROGRESS",
+  "server_id": "c05fc792-3807-4bd0-becd-d7fc5035474b",
+  "config_id": "43d20c1e-94c4-41de-b657-b522edbb5c0c",
+  "output_values": null,
+  "creation_time": "2017-06-12T13:40:14Z",
+  "input_values": {
+    "interface_name": "nic1",
+    "bridge_name": "br-ex"
+  },
+  "action": "CREATE",
+  "status_reason": "Deploy data available",
+  "id": "3fcbbf55-1238-4d36-9539-53e40ef2e136"
+}
+[stack@undercloud ~]$ heat deployment-show d7fc1305-9b55-4afb-8612-db2917b11505
+WARNING (shell) "heat deployment-show" is deprecated, please use "openstack software deployment show" instead
+{
+  "status": "IN_PROGRESS",
+  "server_id": "c05fc792-3807-4bd0-becd-d7fc5035474b",
+  "config_id": "d0134c5e-3aae-4a6a-98f4-5c577a41d24c",
+  "output_values": null,
+  "creation_time": "2017-06-12T13:40:08Z",
+  "input_values": {
+    "update_identifier": ""
+  },
+  "action": "CREATE",
+  "status_reason": "Deploy data available",
+  "id": "d7fc1305-9b55-4afb-8612-db2917b11505"
+}</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>To get more details on these deployments we can use the heat config-list/config-show commands</p>
+</div>
+<div class="paragraph">
+<p>We first get the deployment id:</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> [stack@undercloud ~]$ heat resource-list -n5 overcloud | grep SoftwareDeployment | grep CREATE_FAILED
+WARNING (shell) "heat resource-list" is deprecated, please use "openstack stack resource list" instead
+| NetworkDeployment                         | 3fcbbf55-1238-4d36-9539-53e40ef2e136                                            | OS::TripleO::SoftwareDeployment                                                                                     | CREATE_FAILED   | 2017-06-12T13:34:54Z | overcloud-Compute-f7gr76kpxqaz-0-h42tisowbbuu                                                                        |
+| UpdateDeployment                          | d7fc1305-9b55-4afb-8612-db2917b11505                                            | OS::Heat::SoftwareDeployment                                                                                        | CREATE_FAILED   | 2017-06-12T13:34:54Z | overcloud-Compute-f7gr76kpxqaz-0-h42tisowbbuu                                                                        |</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>With the deployment id, we grep it to get the config id</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> [stack@undercloud ~]$  heat deployment-list | grep 3fcbbf55-1238-4d36-9539-53e40ef2e136
+WARNING (shell) "heat deployment-list" is deprecated, please use "openstack software deployment list" instead
+| 3fcbbf55-1238-4d36-9539-53e40ef2e136 | 43d20c1e-94c4-41de-b657-b522edbb5c0c | c05fc792-3807-4bd0-becd-d7fc5035474b | CREATE | IN_PROGRESS | 2017-06-12T13:40:14Z | Deploy data available |</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>The second column is the config id, once we have it we can do a config show and see what inputs have been passed to os-net-config on the compute 0 host:</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> [stack@undercloud ~]$ heat config-show 43d20c1e-94c4-41de-b657-b522edbb5c0c
+WARNING (shell) "heat config-show" is deprecated, please use "openstack software config show" instead
+{
+  "inputs": [
+    {
+      "type": "String",
+      "name": "interface_name",
+      "value": "nic1"
+    },
+    {
+      "type": "String",
+      "name": "bridge_name",
+      "value": "br-ex"
+    },
+    {
+      "type": "String",
+      "name": "deploy_server_id",
+      "value": "c05fc792-3807-4bd0-becd-d7fc5035474b",
+      "description": "ID of the server being deployed to"
+    },
+    {
+      "type": "String",
+      "name": "deploy_action",
+      "value": "CREATE",
+      "description": "Name of the current action being deployed"
+    },
+    {
+      "type": "String",
+      "name": "deploy_stack_id",
+      "value": "overcloud-Compute-f7gr76kpxqaz-0-h42tisowbbuu/f9c1c76e-f7a7-4770-9bd0-a4c49e480d84",
+      "description": "ID of the stack this deployment belongs to"
+    },
+    {
+      "type": "String",
+      "name": "deploy_resource_name",
+      "value": "NetworkDeployment",
+      "description": "Name of this deployment resource in the stack"
+    },
+    {
+      "type": "String",
+      "name": "deploy_signal_transport",
+      "value": "CFN_SIGNAL",
+      "description": "How the server should signal to heat with the deployment output values."
+    },
+    {
+      "type": "String",
+      "name": "deploy_signal_id",
+      "value": "http://10.0.0.10:8000/v1/signal/arn%3Aopenstack%3Aheat%3A%3Ae6128b61cf7a4169a8f61cdf41a27344%3Astacks%2Fovercloud-Compute-f7gr76kpxqaz-0-h42tisowbbuu%2Ff9c1c76e-f7a7-4770-9bd0-a4c49e480d84%2Fresources%2FNetworkDeployment?Timestamp=2017-06-12T13%3A34%3A54Z&amp;SignatureMethod=HmacSHA256&amp;AWSAccessKeyId=38be6b4a84d24b429a6b6fcf434535e5&amp;SignatureVersion=2&amp;Signature=XBnVw%2BUhMBj56vdkjJcNfV5kjylCkJLQ%2FGHec61iLDQ%3D",
+      "description": "ID of signal to use for signaling output values"
+    },
+    {
+      "type": "String",
+      "name": "deploy_signal_verb",
+      "value": "POST",
+      "description": "HTTP verb to use for signaling outputvalues"
+    }
+  ],
+  "group": "os-apply-config",
+  "name": "NetworkDeployment",
+  "outputs": [],
+  "creation_time": "2017-06-12T13:40:13Z",
+  "options": {},
+  "config": {
+    "os_net_config": {
+      "network_config": [
+        {
+          "addresses": [
+            {
+              "ip_netmask": "10.0.0.59/24"
+            }
+          ],
+          "bonding_options": "mode=1 miimon=150",
+          "members": [
+            {
+              "type": "interface",
+              "name": "eth0",
+              "primary": true
+            },
+            {
+              "type": "interface",
+              "name": "eth1"
+            }
+          ],
+          "routes": [
+            {
+              "ip_netmask": "169.254.169.254/32",
+              "next_hop": "10.0.0.10"
+            }
+          ],
+          "use_dhcp": false,
+          "type": "linux_bond",
+          "name": "bond0"
+        },
+        {
+          "dns_servers": [
+            "192.168.101.1",
+            "8.8.8.8"
+          ],
+          "type": "ovs_bridge",
+          "name": "br-tenant",
+          "members": [
+            {
+              "type": "linux_bond",
+              "bonding_options": "mode=1 miimon=150",
+              "members": [
+                {
+                  "type": "interface",
+                  "name": "eth2",
+                  "primary": true
+                },
+                {
+                  "type": "interface",
+                  "name": "eth3"
+                }
+              ],
+              "name": "bond1"
+            },
+            {
+              "device": "bond1",
+              "use_dhcp": false,
+              "type": "vlan",
+              "addresses": [
+                {
+                  "ip_netmask": "192.168.3.154/24"
+                }
+              ],
+              "vlan_id": 300
+            },
+            {
+              "addresses": [
+                {
+                  "ip_netmask": "10.0.0.59/24"
+                }
+              ],
+              "routes": [
+                {
+                  "default": true,
+                  "next_hop": "192.168.101.1"
+                }
+              ],
+              "device": "bond1",
+              "use_dhcp": false,
+              "type": "vlan",
+              "vlan_id": 101
+            }
+          ]
+        },
+        {
+          "dns_servers": [
+            "192.168.101.1",
+            "8.8.8.8"
+          ],
+          "type": "ovs_bridge",
+          "name": "br-api",
+          "members": [
+            {
+              "use_dhcp": false,
+              "type": "linux_bond",
+              "bonding_options": "mode=1 miimon=150",
+              "members": [
+                {
+                  "type": "interface",
+                  "name": "eth4",
+                  "primary": true
+                },
+                {
+                  "type": "interface",
+                  "name": "eth5"
+                }
+              ],
+              "name": "bond2"
+            },
+            {
+              "device": "bond2",
+              "use_dhcp": false,
+              "type": "vlan",
+              "addresses": [
+                {
+                  "ip_netmask": "192.168.2.154/24"
+                }
+              ],
+              "vlan_id": 200
+            }
+          ]
+        },
+        {
+          "dns_servers": [
+            "192.168.101.1",
+            "8.8.8.8"
+          ],
+          "type": "ovs_bridge",
+          "name": "br-storage",
+          "members": [
+            {
+              "type": "linux_bond",
+              "bonding_options": "mode=1 miimon=150",
+              "members": [
+                {
+                  "type": "interface",
+                  "name": "eth6",
+                  "primary": true
+                },
+                {
+                  "type": "interface",
+                  "name": "eth7"
+                }
+              ],
+              "name": "bond3"
+            },
+            {
+              "device": "bond3",
+              "use_dhcp": false,
+              "type": "vlan",
+              "addresses": [
+                {
+                  "ip_netmask": "10.0.0.59/24"
+                }
+              ],
+              "vlan_id": 100
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "id": "43d20c1e-94c4-41de-b657-b522edbb5c0c"
+}</pre>
+</div>
+</div>
+<div class="paragraph">
+<p><strong>Checking Errors from the Overcloud Node</strong></p>
+</div>
+<div class="paragraph">
+<p>Once the nodes are deployed we can access them via ILO if no network has been configured, or via SSH using the heat-admin user from the undercloud node.
+To be able to access the overcloud node via the ILO we need to have previously modified the overcloud image to add a root passwd</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre>#virt-customize -a overcloud-full.qcow2 --root-password password:test</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>In this example we check the stack resource list and see that the controller nodes have been stuck a long time in network deployment</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> 2017-06-13 14:38:05Z [overcloud.Controller.0.NetworkDeployment]: CREATE_IN_PROGRESS  state changed
+2017-06-13 14:38:06Z [overcloud.Controller.1.NetworkDeployment]: CREATE_IN_PROGRESS  state changed
+2017-06-13 14:38:07Z [overcloud.Controller.2.NetworkDeployment]: CREATE_IN_PROGRESS  state changed</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>We are going to connect via ipmi to check whats happening.</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> root@overcloud-controller-0 log]# ip a
+1: lo: &lt;LOOPBACK,UP,LOWER_UP&gt; mtu 65536 qdisc noqueue state UNKNOWN qlen 1
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host
+       valid_lft forever preferred_lft forever
+2: eth0: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu 1500 qdisc pfifo_fast state UP qlen 1000
+    link/ether aa:bb:cc:dd:ee:01 brd ff:ff:ff:ff:ff:ff
+3: eth1: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu 1500 qdisc pfifo_fast state UP qlen 1000
+    link/ether 52:54:00:7a:67:df brd ff:ff:ff:ff:ff:ff
+4: eth2: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu 1500 qdisc pfifo_fast state UP qlen 1000
+    link/ether 52:54:00:8f:3d:8a brd ff:ff:ff:ff:ff:ff
+5: eth3: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu 1500 qdisc pfifo_fast state UP qlen 1000
+    link/ether 52:54:00:d3:8f:e4 brd ff:ff:ff:ff:ff:ff
+6: eth4: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu 1500 qdisc pfifo_fast state UP qlen 1000
+    link/ether 52:54:00:4c:cc:8d brd ff:ff:ff:ff:ff:ff
+7: eth5: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu 1500 qdisc pfifo_fast state UP qlen 1000
+    link/ether 52:54:00:14:6e:eb brd ff:ff:ff:ff:ff:ff
+8: eth6: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu 1500 qdisc pfifo_fast state UP qlen 1000
+    link/ether 52:54:00:c6:09:20 brd ff:ff:ff:ff:ff:ff
+9: eth7: &lt;BROADCAST,MULTICAST,UP,LOWER_UP&gt; mtu 1500 qdisc pfifo_fast state UP qlen 1000
+    link/ether 52:54:00:45:64:c7 brd ff:ff:ff:ff:ff:ff
+    inet6 fe80::5054:ff:fe45:64c7/64 scope link
+       valid_lft forever preferred_lft forever</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Network is not configured, lets check if the needed processes are running:</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> [root@overcloud-controller-0 os-net-config]# ps ax | grep -e os- -e heat
+ps ax | grep -e os- -e heat
+ 2966 ?        Ss     0:01 /usr/bin/python /usr/bin/os-collect-config
+11155 ttyS0    S+     0:00 grep --color=auto -e os- -e heat</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>We can see that os-collect-config is running, but we don&#8217;t have the heat client, nor the os-refresh-config process.</p>
+</div>
+<div class="paragraph">
+<p>Also /var/lib/heat-config dir is empty, so no config files have been copied from the undercloud</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> [root@overcloud-controller-0 os-net-config]# ls /var/lib/heat-config
+deployed</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>We can check the system logs and see, that we can&#8217;t access the metadata server:</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre>Jun 13 10:44:44 overcloud-controller-0 os-collect-config: HTTPConnectionPool(host='169.254.169.254', port=80): Max retries exceeded with url: /latest/meta-data/ (Caused by NewConnectionError('&lt;requests.packages.urllib3.connection.HTTPConnection object at 0x3acfbd0&gt;: Failed to establish a new connection: [Errno 101] Network is unreachable',))</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>If we check for os-net-config in the messages file, we can look for errors in the network config</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> [root@overcloud-controller-1 ~]# cat /var/log/messages | grep -A 80 "os-net-config -c"
+ig -c"ar/log/messages | grep -A 80 "os-net-conf
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: + os-net-config -c /etc/os-net-config/config.json -v --detailed-exit-codes
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] Using config file at: /etc/os-net-config/config.json
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] Using mapping file at: /etc/os-net-config/mapping.yaml
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] Ifcfg net config provider created.
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] nic8 mapped to: eth7
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] nic7 mapped to: eth6
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] nic6 mapped to: eth5
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] nic5 mapped to: eth4
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] nic4 mapped to: eth3
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] nic3 mapped to: eth2
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] nic2 mapped to: eth1
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] nic1 mapped to: eth0
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] adding linux bond: bond0
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] adding custom route for interface: bond0
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] adding interface: eth0
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] adding interface: eth1
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] adding bridge: br-tenant
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] adding interface: eth2
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] adding vlan: vlan300
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] adding bridge: br-api
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] adding linux bond: bond2
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] adding interface: eth4
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] adding interface: eth5
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] adding vlan: vlan200
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] adding bridge: br-storage
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] adding linux bond: bond3
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] adding interface: eth6
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] adding interface: eth7
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] adding vlan: vlan100
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: Traceback (most recent call last):
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: File "/usr/bin/os-net-config", line 10, in &lt;module&gt;
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: sys.exit(main())
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: File "/usr/lib/python2.7/site-packages/os_net_config/cli.py", line 184, in main
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: obj = objects.object_from_json(iface_json)
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: File "/usr/lib/python2.7/site-packages/os_net_config/objects.py", line 38, in object_from_json
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: return Interface.from_json(json)
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: File "/usr/lib/python2.7/site-packages/os_net_config/objects.py", line 299, in from_json
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: opts = _BaseOpts.base_opts_from_json(json)
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: File "/usr/lib/python2.7/site-packages/os_net_config/objects.py", line 253, in base_opts_from_json
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: addresses.append(Address.from_json(address))
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: File "/usr/lib/python2.7/site-packages/os_net_config/objects.py", line 171, in from_json
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: ip_netmask = _get_required_field(json, 'ip_netmask', 'Address')
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: File "/usr/lib/python2.7/site-packages/os_net_config/objects.py", line 78, in _get_required_field
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: raise InvalidConfigException(msg)
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: os_net_config.objects.InvalidConfigException: Address JSON objects require 'ip_netmask' to be configured.
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: + RETVAL=1
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: + [[ 1 == 2 ]]
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: + [[ 1 != 0 ]]
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: + echo 'ERROR: os-net-config configuration failed.'
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: ERROR: os-net-config configuration failed.
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: + exit 1
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: + configure_safe_defaults
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: + [[ 1 == 0 ]]
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: + cat</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>We can see that os-net-config says there is no ip_netmask configure for vlan100, we can take at the config file being user by os-net-config</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> [root@overcloud-controller-1 ~]# cat /etc/os-net-config/config.json | jq .
+cat /etc/o s-net-config/config.json | jq .
+{
+  "network_config": [
+    {
+      "name": "bond0",
+      "type": "linux_bond",
+      "use_dhcp": false,
+      "routes": [
+        {
+          "next_hop": "10.0.0.10",
+          "ip_netmask": "169.254.169.254/32"
+        }
+      ],
+      "members": [
+        {
+          "primary": true,
+          "name": "eth0",
+          "type": "interface"
+        },
+        {
+          "name": "eth1",
+          "type": "interface"
+        }
+      ],
+      "bonding_options": "mode=1 miimon=150",
+      "addresses": [
+        {
+          "ip_netmask": "10.0.0.58/24"
+        }
+      ]
+    },
+    {
+      "members": [
+        {
+          "primary": true,
+          "name": "eth2",
+          "type": "interface"
+        },
+        {
+          "vlan_id": 300,
+          "addresses": [
+            {
+              "ip_netmask": "192.168.3.151/24"
+            }
+          ],
+          "type": "vlan",
+          "use_dhcp": false
+        }
+      ],
+      "name": "br-tenant",
+      "type": "ovs_bridge",
+      "dns_servers": [
+        "192.168.101.1",
+        "8.8.8.8"
+      ]
+    },
+    {
+      "members": [
+        {
+          "name": "bond2",
+          "members": [
+            {
+              "primary": true,
+              "name": "eth4",
+              "type": "interface"
+            },
+            {
+              "name": "eth5",
+              "type": "interface"
+            }
+          ],
+          "bonding_options": "mode=1 miimon=150",
+          "type": "linux_bond"
+        },
+        {
+          "vlan_id": 200,
+          "addresses": [
+            {
+              "ip_netmask": "192.168.2.151/24"
+            }
+          ],
+          "type": "vlan",
+          "device": "bond2"
+        }
+      ],
+      "name": "br-api",
+      "type": "ovs_bridge",
+      "dns_servers": [
+        "192.168.101.1",
+        "8.8.8.8"
+      ]
+    },
+    {
+      "members": [
+        {
+          "name": "bond3",
+          "members": [
+            {
+              "primary": true,
+              "name": "eth6",
+              "type": "interface"
+            },
+            {
+              "name": "eth7",
+              "type": "interface"
+            }
+          ],
+          "bonding_options": "mode=1 miimon=150",
+          "type": "linux_bond"
+        },
+        {
+          "vlan_id": 100,
+          "addresses": [
+            {
+              "ip_netmask": "192.168.1.151/24"
+            }
+          ],
+          "type": "vlan",
+          "device": "bond3"
+        }
+      ],
+      "name": "br-storage",
+      "type": "ovs_bridge",
+      "dns_servers": [
+        "192.168.101.1",
+        "8.8.8.8"
+      ]
+    },
+    {
+      "name": "eth3",
+      "vlan_id": 101,
+      "addresses": [
+        {
+          "ip_netmask": "192.168.101.151/24",
+          "routes": null
+        },
+        {
+          "next_hop": "192.168.101.1",
+          "default": true
+        }
+      ],
+      "type": "interface",
+      "use_dhcp": false
+    }
+  ]
+}</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Looks like something is wrong with eth3, the first problem is that the eth3 device doesn&#8217;t have vlans, is a access port, to do tests for a valid config we can modify the file in /etc/os-net-config</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> root@overcloud-controller-1 os-net-config]# pwd
+/etc/os-net-config
+[root@overcloud-controller-1 os-net-config]# ls
+config.json  dhcp_all_interfaces.yaml</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>We stop the collect service, so it doesn&#8217;t interfere with the manual execution</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> [root@overcloud-controller-1 os-net-config]# systemctl stop os-collect-config.service
+rvicemctl stop os-collect-config.se</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>I created another filed called config.json and remvoved the eth3 configuration and run the os-net-config command, and all works fine</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> [root@overcloud-controller-1 os-net-config]# os-net-config -c /etc/os-net-config/config.json.test -v --detailed-exit-codes
+/config.json.test -v --detailed-exit-codes
+[2017/06/13 03:37:27 PM] [INFO] Using config file at: /etc/os-net-config/config.json.test
+[2017/06/13 03:37:27 PM] [INFO] Using mapping file at: /etc/os-net-config/mapping.yaml
+[2017/06/13 03:37:27 PM] [INFO] Ifcfg net config provider created.
+[2017/06/13 03:37:27 PM] [INFO] nic2 mapped to: eth7
+[2017/06/13 03:37:27 PM] [INFO] nic1 mapped to: eth3
+[2017/06/13 03:37:27 PM] [INFO] adding linux bond: bond0
+[2017/06/13 03:37:27 PM] [INFO] adding custom route for interface: bond0
+[2017/06/13 03:37:27 PM] [INFO] adding interface: eth0
+[2017/06/13 03:37:27 PM] [INFO] adding interface: eth1
+[2017/06/13 03:37:27 PM] [INFO] adding bridge: br-tenant
+[2017/06/13 03:37:27 PM] [INFO] adding interface: eth2
+[2017/06/13 03:37:27 PM] [INFO] adding vlan: vlan300
+[2017/06/13 03:37:27 PM] [INFO] adding bridge: br-api
+[2017/06/13 03:37:27 PM] [INFO] adding linux bond: bond2
+[2017/06/13 03:37:27 PM] [INFO] adding interface: eth4
+[2017/06/13 03:37:27 PM] [INFO] adding interface: eth5
+[2017/06/13 03:37:27 PM] [INFO] adding vlan: vlan200
+[2017/06/13 03:37:27 PM] [INFO] adding bridge: br-storage
+[2017/06/13 03:37:27 PM] [INFO] adding linux bond: bond3
+[2017/06/13 03:37:27 PM] [INFO] adding interface: eth6
+[2017/06/13 03:37:27 PM] [INFO] adding interface: eth7
+[2017/06/13 03:37:27 PM] [INFO] adding vlan: vlan100
+[2017/06/13 03:37:27 PM] [INFO] applying network configs...
+[2017/06/13 03:37:31 PM] [INFO] running ifup on bridge: br-tenant
+[2017/06/13 03:37:31 PM] [INFO] running ifup on bridge: br-storage
+[2017/06/13 03:37:32 PM] [INFO] running ifup on bridge: br-api
+[2017/06/13 03:37:32 PM] [INFO] running ifup on interface: eth7
+[2017/06/13 03:37:32 PM] [INFO] running ifup on interface: eth6
+[2017/06/13 03:37:32 PM] [INFO] running ifup on interface: eth5
+[2017/06/13 03:37:32 PM] [INFO] running ifup on interface: eth4
+[2017/06/13 03:37:32 PM] [INFO] running ifup on interface: eth2
+[2017/06/13 03:37:33 PM] [INFO] running ifup on interface: eth1
+[2017/06/13 03:37:33 PM] [INFO] running ifup on interface: eth0
+[2017/06/13 03:37:33 PM] [INFO] running ifup on interface: vlan300
+[2017/06/13 03:37:38 PM] [INFO] running ifup on interface: vlan100
+[2017/06/13 03:37:42 PM] [INFO] running ifup on interface: bond3
+[2017/06/13 03:37:43 PM] [INFO] running ifup on interface: vlan200
+[2017/06/13 03:37:47 PM] [INFO] running ifup on interface: bond2
+[2017/06/13 03:37:48 PM] [INFO] running ifup on interface: eth1
+[2017/06/13 03:37:48 PM] [INFO] running ifup on interface: eth0
+[2017/06/13 03:37:48 PM] [INFO] running ifup on interface: eth5
+[2017/06/13 03:37:48 PM] [INFO] running ifup on interface: eth4
+[2017/06/13 03:37:48 PM] [INFO] running ifup on interface: eth7
+[2017/06/13 03:37:48 PM] [INFO] running ifup on interface: eth6
+[2017/06/13 03:37:48 PM] [INFO] running ifup on interface: bond0
+[2017/06/13 03:37:53 PM] [INFO] running ifup on interface: bond2
+[2017/06/13 03:37:53 PM] [INFO] running ifup on interface: bond3
+[2017/06/13 03:37:54 PM] [INFO] running ifup on interface: vlan200
+[2017/06/13 03:37:54 PM] [INFO] running ifup on interface: vlan300
+[2017/06/13 03:37:55 PM] [INFO] running ifup on interface: vlan100</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>After checking the controller nic-config templates, there was and identation error in the controller.yml file, with the vlan line in eth3 configuration, once the files where modified and the stack rerun the installation continued ok.</p>
 </div>
 </div>
 </div>
@@ -1355,7 +2242,7 @@ network/scripts/run-os-net-config.sh</pre>
 </div>
 <div id="footer">
 <div id="footer-text">
-Last updated 2017-06-08 23:50:18 CEST
+Last updated 2017-06-13 22:05:23 CEST
 </div>
 </div>
 </body>
