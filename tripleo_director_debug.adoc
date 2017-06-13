@@ -1092,3 +1092,350 @@ WARNING (shell) "heat config-show" is deprecated, please use "openstack software
   "id": "43d20c1e-94c4-41de-b657-b522edbb5c0c"
 }
 
+
+
+
+*Checking Errors from the Overcloud Node*
+
+Once the nodes are deployed we can access them via ILO if no network has been configured, or via SSH using the heat-admin user from the undercloud node.
+To be able to access the overcloud node via the ILO we need to have previously modified the overcloud image to add a root passwd
+
+ #virt-customize -a overcloud-full.qcow2 --root-password password:test
+
+In this example we check the stack resource list and see that the controller nodes have been stuck a long time in network deployment
+
+ 2017-06-13 14:38:05Z [overcloud.Controller.0.NetworkDeployment]: CREATE_IN_PROGRESS  state changed
+2017-06-13 14:38:06Z [overcloud.Controller.1.NetworkDeployment]: CREATE_IN_PROGRESS  state changed
+2017-06-13 14:38:07Z [overcloud.Controller.2.NetworkDeployment]: CREATE_IN_PROGRESS  state changed
+
+We are going to connect via ipmi to check whats happening.
+
+ root@overcloud-controller-0 log]# ip a
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN qlen 1
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host 
+       valid_lft forever preferred_lft forever
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP qlen 1000
+    link/ether aa:bb:cc:dd:ee:01 brd ff:ff:ff:ff:ff:ff
+3: eth1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP qlen 1000
+    link/ether 52:54:00:7a:67:df brd ff:ff:ff:ff:ff:ff
+4: eth2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP qlen 1000
+    link/ether 52:54:00:8f:3d:8a brd ff:ff:ff:ff:ff:ff
+5: eth3: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP qlen 1000
+    link/ether 52:54:00:d3:8f:e4 brd ff:ff:ff:ff:ff:ff
+6: eth4: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP qlen 1000
+    link/ether 52:54:00:4c:cc:8d brd ff:ff:ff:ff:ff:ff
+7: eth5: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP qlen 1000
+    link/ether 52:54:00:14:6e:eb brd ff:ff:ff:ff:ff:ff
+8: eth6: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP qlen 1000
+    link/ether 52:54:00:c6:09:20 brd ff:ff:ff:ff:ff:ff
+9: eth7: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP qlen 1000
+    link/ether 52:54:00:45:64:c7 brd ff:ff:ff:ff:ff:ff
+    inet6 fe80::5054:ff:fe45:64c7/64 scope link 
+       valid_lft forever preferred_lft forever
+
+
+Network is not configured, lets check if the needed processes are running:
+
+ [root@overcloud-controller-0 os-net-config]# ps ax | grep -e os- -e heat
+ps ax | grep -e os- -e heat
+ 2966 ?        Ss     0:01 /usr/bin/python /usr/bin/os-collect-config
+11155 ttyS0    S+     0:00 grep --color=auto -e os- -e heat
+
+We can see that os-collect-config is running, but we don't have the heat client, nor the os-refresh-config process.
+
+Also /var/lib/heat-config dir is empty, so no config files have been copied from the undercloud
+
+ [root@overcloud-controller-0 os-net-config]# ls /var/lib/heat-config
+deployed
+
+We can check the system logs and see, that we can't access the metadata server:
+
+ Jun 13 10:44:44 overcloud-controller-0 os-collect-config: HTTPConnectionPool(host='169.254.169.254', port=80): Max retries exceeded with url: /latest/meta-data/ (Caused by NewConnectionError('<requests.packages.urllib3.connection.HTTPConnection object at 0x3acfbd0>: Failed to establish a new connection: [Errno 101] Network is unreachable',))
+
+
+If we check for os-net-config in the messages file, we can look for errors in the network config
+
+ [root@overcloud-controller-1 ~]# cat /var/log/messages | grep -A 80 "os-net-config -c"
+ig -c"ar/log/messages | grep -A 80 "os-net-conf 
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: + os-net-config -c /etc/os-net-config/config.json -v --detailed-exit-codes
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] Using config file at: /etc/os-net-config/config.json
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] Using mapping file at: /etc/os-net-config/mapping.yaml
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] Ifcfg net config provider created.
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] nic8 mapped to: eth7
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] nic7 mapped to: eth6
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] nic6 mapped to: eth5
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] nic5 mapped to: eth4
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] nic4 mapped to: eth3
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] nic3 mapped to: eth2
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] nic2 mapped to: eth1
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] nic1 mapped to: eth0
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] adding linux bond: bond0
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] adding custom route for interface: bond0
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] adding interface: eth0
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] adding interface: eth1
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] adding bridge: br-tenant
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] adding interface: eth2
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] adding vlan: vlan300
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] adding bridge: br-api
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] adding linux bond: bond2
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] adding interface: eth4
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] adding interface: eth5
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] adding vlan: vlan200
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] adding bridge: br-storage
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] adding linux bond: bond3
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] adding interface: eth6
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] adding interface: eth7
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: [2017/06/13 10:38:09 AM] [INFO] adding vlan: vlan100
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: Traceback (most recent call last):
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: File "/usr/bin/os-net-config", line 10, in <module>
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: sys.exit(main())
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: File "/usr/lib/python2.7/site-packages/os_net_config/cli.py", line 184, in main
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: obj = objects.object_from_json(iface_json)
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: File "/usr/lib/python2.7/site-packages/os_net_config/objects.py", line 38, in object_from_json
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: return Interface.from_json(json)
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: File "/usr/lib/python2.7/site-packages/os_net_config/objects.py", line 299, in from_json
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: opts = _BaseOpts.base_opts_from_json(json)
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: File "/usr/lib/python2.7/site-packages/os_net_config/objects.py", line 253, in base_opts_from_json
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: addresses.append(Address.from_json(address))
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: File "/usr/lib/python2.7/site-packages/os_net_config/objects.py", line 171, in from_json
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: ip_netmask = _get_required_field(json, 'ip_netmask', 'Address')
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: File "/usr/lib/python2.7/site-packages/os_net_config/objects.py", line 78, in _get_required_field
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: raise InvalidConfigException(msg)
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: os_net_config.objects.InvalidConfigException: Address JSON objects require 'ip_netmask' to be configured.
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: + RETVAL=1
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: + [[ 1 == 2 ]]
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: + [[ 1 != 0 ]]
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: + echo 'ERROR: os-net-config configuration failed.'
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: ERROR: os-net-config configuration failed.
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: + exit 1
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: + configure_safe_defaults
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: + [[ 1 == 0 ]]
+Jun 13 10:38:09 overcloud-controller-1 os-collect-config: + cat
+
+
+We can see that os-net-config says there is no ip_netmask configure for vlan100, we can take at the config file being user by os-net-config
+
+ [root@overcloud-controller-1 ~]# cat /etc/os-net-config/config.json | jq .
+cat /etc/o s-net-config/config.json | jq .
+{
+  "network_config": [
+    {
+      "name": "bond0",
+      "type": "linux_bond",
+      "use_dhcp": false,
+      "routes": [
+        {
+          "next_hop": "10.0.0.10",
+          "ip_netmask": "169.254.169.254/32"
+        }
+      ],
+      "members": [
+        {
+          "primary": true,
+          "name": "eth0",
+          "type": "interface"
+        },
+        {
+          "name": "eth1",
+          "type": "interface"
+        }
+      ],
+      "bonding_options": "mode=1 miimon=150",
+      "addresses": [
+        {
+          "ip_netmask": "10.0.0.58/24"
+        }
+      ]
+    },
+    {
+      "members": [
+        {
+          "primary": true,
+          "name": "eth2",
+          "type": "interface"
+        },
+        {
+          "vlan_id": 300,
+          "addresses": [
+            {
+              "ip_netmask": "192.168.3.151/24"
+            }
+          ],
+          "type": "vlan",
+          "use_dhcp": false
+        }
+      ],
+      "name": "br-tenant",
+      "type": "ovs_bridge",
+      "dns_servers": [
+        "192.168.101.1",
+        "8.8.8.8"
+      ]
+    },
+    {
+      "members": [
+        {
+          "name": "bond2",
+          "members": [
+            {
+              "primary": true,
+              "name": "eth4",
+              "type": "interface"
+            },
+            {
+              "name": "eth5",
+              "type": "interface"
+            }
+          ],
+          "bonding_options": "mode=1 miimon=150",
+          "type": "linux_bond"
+        },
+        {
+          "vlan_id": 200,
+          "addresses": [
+            {
+              "ip_netmask": "192.168.2.151/24"
+            }
+          ],
+          "type": "vlan",
+          "device": "bond2"
+        }
+      ],
+      "name": "br-api",
+      "type": "ovs_bridge",
+      "dns_servers": [
+        "192.168.101.1",
+        "8.8.8.8"
+      ]
+    },
+    {
+      "members": [
+        {
+          "name": "bond3",
+          "members": [
+            {
+              "primary": true,
+              "name": "eth6",
+              "type": "interface"
+            },
+            {
+              "name": "eth7",
+              "type": "interface"
+            }
+          ],
+          "bonding_options": "mode=1 miimon=150",
+          "type": "linux_bond"
+        },
+        {
+          "vlan_id": 100,
+          "addresses": [
+            {
+              "ip_netmask": "192.168.1.151/24"
+            }
+          ],
+          "type": "vlan",
+          "device": "bond3"
+        }
+      ],
+      "name": "br-storage",
+      "type": "ovs_bridge",
+      "dns_servers": [
+        "192.168.101.1",
+        "8.8.8.8"
+      ]
+    },
+    {
+      "name": "eth3",
+      "vlan_id": 101,
+      "addresses": [
+        {
+          "ip_netmask": "192.168.101.151/24",
+          "routes": null
+        },
+        {
+          "next_hop": "192.168.101.1",
+          "default": true
+        }
+      ],
+      "type": "interface",
+      "use_dhcp": false
+    }
+  ]
+}
+
+
+Looks like something is wrong with eth3, the first problem is that the eth3 device doesn't have vlans, is a access port, to do tests for a valid config we can modify the file in /etc/os-net-config
+
+ root@overcloud-controller-1 os-net-config]# pwd
+/etc/os-net-config
+[root@overcloud-controller-1 os-net-config]# ls
+config.json  dhcp_all_interfaces.yaml
+
+We stop the collect service, so it doesn't interfere with the manual execution
+
+ [root@overcloud-controller-1 os-net-config]# systemctl stop os-collect-config.service
+rvicemctl stop os-collect-config.se 
+
+
+I created another filed called config.json and remvoved the eth3 configuration and run the os-net-config command, and all works fine
+
+ [root@overcloud-controller-1 os-net-config]# os-net-config -c /etc/os-net-config/config.json.test -v --detailed-exit-codes
+/config.json.test -v --detailed-exit-codes
+[2017/06/13 03:37:27 PM] [INFO] Using config file at: /etc/os-net-config/config.json.test
+[2017/06/13 03:37:27 PM] [INFO] Using mapping file at: /etc/os-net-config/mapping.yaml
+[2017/06/13 03:37:27 PM] [INFO] Ifcfg net config provider created.
+[2017/06/13 03:37:27 PM] [INFO] nic2 mapped to: eth7
+[2017/06/13 03:37:27 PM] [INFO] nic1 mapped to: eth3
+[2017/06/13 03:37:27 PM] [INFO] adding linux bond: bond0
+[2017/06/13 03:37:27 PM] [INFO] adding custom route for interface: bond0
+[2017/06/13 03:37:27 PM] [INFO] adding interface: eth0
+[2017/06/13 03:37:27 PM] [INFO] adding interface: eth1
+[2017/06/13 03:37:27 PM] [INFO] adding bridge: br-tenant
+[2017/06/13 03:37:27 PM] [INFO] adding interface: eth2
+[2017/06/13 03:37:27 PM] [INFO] adding vlan: vlan300
+[2017/06/13 03:37:27 PM] [INFO] adding bridge: br-api
+[2017/06/13 03:37:27 PM] [INFO] adding linux bond: bond2
+[2017/06/13 03:37:27 PM] [INFO] adding interface: eth4
+[2017/06/13 03:37:27 PM] [INFO] adding interface: eth5
+[2017/06/13 03:37:27 PM] [INFO] adding vlan: vlan200
+[2017/06/13 03:37:27 PM] [INFO] adding bridge: br-storage
+[2017/06/13 03:37:27 PM] [INFO] adding linux bond: bond3
+[2017/06/13 03:37:27 PM] [INFO] adding interface: eth6
+[2017/06/13 03:37:27 PM] [INFO] adding interface: eth7
+[2017/06/13 03:37:27 PM] [INFO] adding vlan: vlan100
+[2017/06/13 03:37:27 PM] [INFO] applying network configs...
+[2017/06/13 03:37:31 PM] [INFO] running ifup on bridge: br-tenant
+[2017/06/13 03:37:31 PM] [INFO] running ifup on bridge: br-storage
+[2017/06/13 03:37:32 PM] [INFO] running ifup on bridge: br-api
+[2017/06/13 03:37:32 PM] [INFO] running ifup on interface: eth7
+[2017/06/13 03:37:32 PM] [INFO] running ifup on interface: eth6
+[2017/06/13 03:37:32 PM] [INFO] running ifup on interface: eth5
+[2017/06/13 03:37:32 PM] [INFO] running ifup on interface: eth4
+[2017/06/13 03:37:32 PM] [INFO] running ifup on interface: eth2
+[2017/06/13 03:37:33 PM] [INFO] running ifup on interface: eth1
+[2017/06/13 03:37:33 PM] [INFO] running ifup on interface: eth0
+[2017/06/13 03:37:33 PM] [INFO] running ifup on interface: vlan300
+[2017/06/13 03:37:38 PM] [INFO] running ifup on interface: vlan100
+[2017/06/13 03:37:42 PM] [INFO] running ifup on interface: bond3
+[2017/06/13 03:37:43 PM] [INFO] running ifup on interface: vlan200
+[2017/06/13 03:37:47 PM] [INFO] running ifup on interface: bond2
+[2017/06/13 03:37:48 PM] [INFO] running ifup on interface: eth1
+[2017/06/13 03:37:48 PM] [INFO] running ifup on interface: eth0
+[2017/06/13 03:37:48 PM] [INFO] running ifup on interface: eth5
+[2017/06/13 03:37:48 PM] [INFO] running ifup on interface: eth4
+[2017/06/13 03:37:48 PM] [INFO] running ifup on interface: eth7
+[2017/06/13 03:37:48 PM] [INFO] running ifup on interface: eth6
+[2017/06/13 03:37:48 PM] [INFO] running ifup on interface: bond0
+[2017/06/13 03:37:53 PM] [INFO] running ifup on interface: bond2
+[2017/06/13 03:37:53 PM] [INFO] running ifup on interface: bond3
+[2017/06/13 03:37:54 PM] [INFO] running ifup on interface: vlan200
+[2017/06/13 03:37:54 PM] [INFO] running ifup on interface: vlan300
+[2017/06/13 03:37:55 PM] [INFO] running ifup on interface: vlan100
+
+
+After checking the controller nic-config templates, there was and identation error in the controller.yml file, with the vlan line in eth3 configuration, once the files where modified and the stack rerun the installation continued ok.
+
+
