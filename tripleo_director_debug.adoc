@@ -439,6 +439,13 @@ root      6715  1306  0 05:18 ?        00:00:00 sudo ironic-rootwrap /etc/ironic
 root      6717  6715  0 05:18 ?        00:00:00 /usr/bin/python2 /usr/bin/ironic-rootwrap /etc/ironic/rootwrap.conf dd if=/var/lib/ironic/images/e4cf9855-392c-40be-92b6-9b10674373d0/disk of=/dev/disk/by-path/ip-10.0.0.60:3260-iscsi-iqn.2008-10.org.openstack:e4cf9855-392c-40be-92b6-9b10674373d0-lun-1-part2 bs=1M oflag=direct
 root      6719  6717  2 05:18 ?        00:00:00 /bin/dd if=/var/lib/ironic/images/e4cf9855-392c-40be-92b6-9b10674373d0/disk of=/dev/disk/by-path/ip-10.0.0.60:3260-iscsi-iqn.2008-10.org.openstack:e4cf9855-392c-40be-92b6-9b10674373d0-lun-1-part2 bs=1M oflag=direct
 
+
+During this time, Nova is constantly polling Ironic to check whether the node has successfully deployed the overcloud image. It does this by checking the provision state of the node. Once it’s 'active', the deployment has been successful:
+
+ [root@undercloud ~]# grep -m 1 "Still waiting for ironic node" /var/log/nova/nova-compute.log
+2016-09-22 09:12:08.287 11893 DEBUG nova.virt.ironic.driver [-] [instance: 9fefdc3e-0247-4732-bad1-0a87c26a4251] Still waiting for ironic node 875921b3-9864-4aef-8d53-e6a69f2b1fde to unprovision: power_state="power on", target_power_state=None, provision_state="deleting", target_provision_state="available" _log_ironic_polling /usr/lib/python2.7/site-packages/nova/virt/ironic/driver.py:120
+
+
 *Overview of the deploy stages trough Ironic node states*
 
 When we first run the overcloud deploy command the ironic nodes go from active to deploying state
@@ -1482,5 +1489,69 @@ WARNING (shell) "heat config-show" is deprecated, please use "openstack software
       "description": ""
     }, 
 
+*os-collect-config*
+
+This is a tool that starts at boot time, and continues to run via systemd. It’s primary responsibility is to monitor and download metadata from the Heat API. If the data has changed, it automatically calls os-refresh-config.
+Its configured at boot time by cloud-init that populates /etc/os-collect-config.conf with credentials and the metadata url of the undercloud.
+
+ [root@ctrl02 ~]# cat /etc/os-collect-config.conf 
+ [DEFAULT]
+command = os-refresh-config --timeout 14400
+collectors = ec2
+collectors = request
+collectors = local
+ [request]
+metadata_url = http://10.0.0.10:8080/v1/AUTH_e6128b61cf7a4169a8f61cdf41a27344/ov-74kpxh4ucep-1-4sgqxt3uvuen-Controller-upu7hcpbqzlx/d5c2ea57-1c1c-4366-82f8-01acdded95e7?temp_url_sig=f64f4ea5483aca3caff9e3cf6a7ce2539cf352ef&temp_url_expires=2147483586
+
+
+*os-refresh-config*
+
+os-collet-config calls another tool call os-refresh-config, among them you can see os-net-config, os-refresh-config doesn't have a way to signal errors to heat, thats why failures like the ones in the network config don't get reported back to heat, and you will have to wait for a timeout
+
+The important steps that os-refresh-config take are as follows:
+
+    - Apply systemctl configurables
+    - Run os-apply-config (see below)
+    - Configure the networking for the host
+    - Download and set the hieradata files for puppet parameters
+    - Configure /etc/hosts
+    - Deploy software configuration with Heat
+
+It is within these scripts that the metadata downloaded by os-collect-config will be acted upon, these are this scripts that run
+
+ [root@ctrl01 ~]# ls -l /usr/libexec/os-refresh-config/configure.d/
+total 32
+-rwxr-xr-x. 1 root root   42 May  4 12:13 20-os-apply-config
+-rwxr-xr-x. 1 root root 3547 May  4 12:13 20-os-net-config
+-rwxr-xr-x. 1 root root  629 May  4 12:13 25-set-network-gateway
+-rwxr-xr-x. 1 root root 2830 May  4 12:13 40-hiera-datafiles
+-rwxr-xr-x. 1 root root  394 May  4 12:13 40-truncate-nova-config
+-rwxr-xr-x. 1 root root 1387 May  4 12:13 51-hosts
+-rwxr-xr-x. 1 root root 6575 Sep  8  2016 55-heat-config
+
+If needed you can run the scripts by hand to get the output on screen for debugging purpouses.
+Heat seeds the SoftwareDeployment to the nodes in the form of metadata, and relies on os-collect-config to download it, and os-refresh-config to apply it.
+
+
+*Checking puppet in the overcloud nodes*
+
+The hieradata files are populated from metadata in heat by the 40-hiera-datafiles script that is run by os-refresh-config, it dumps thehieradata info in /etc/puppet/hieradata, it can be very usefull to check variable data in this dir, so for example we are wondering were this ip came from
+
+ [root@ctrl01 hieradata]# pcs status | grep 192.168.2.190
+ ip-192.168.2.190       (ocf::heartbeat:IPaddr2):       Started ctrl01
+
+We can check in the hieradata files
+
+ root@ctrl01 hieradata]# grep 192.168.2.190 /etc/puppet/hieradata/vip_data.yaml 
+redis_vip: 192.168.2.190
+tripleo::keepalived::redis_virtual_ip: 192.168.2.190
+
+Also service conf files variables, for example the endpoint on this host for the tenant vxlan tunnel
+
+ root@ctrl01 hieradata]# grep local_ip /etc/puppet/hieradata/service_configs.yaml  
+neutron::agents::ml2::ovs::local_ip: 192.168.3.150
+
+
+Puppet code is run from dir "", if puppet is getting at some point we can kill the puppet process and run it by hand
 
 
