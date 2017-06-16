@@ -1439,3 +1439,48 @@ I created another filed called config.json and remvoved the eth3 configuration a
 After checking the controller nic-config templates, there was and identation error in the controller.yml file, with the vlan line in eth3 configuration, once the files where modified and the stack rerun the installation continued ok.
 
 
+*Checking info in /var/lib/heat-config*
+
+One dir that has a lot of deploy information is /var/lib/heat-config
+
+ [root@overcloud-controller-0 ~]# ls /var/lib/heat-config
+deployed  heat-config-puppet  heat-config-script
+
+The deployed dir has all the software deployment json files and the values returned to heat , there are 2 tipes of files, the normal .json  file that has the software configuration deployment info and the notify.json files that have the information that is sent back to heat once the software configuration is run:
+
+ [root@overcloud-controller-0 ~]# ls /var/lib/heat-config/deployed/
+0a79cff6-4a38-4c5a-9fa3-f1616e8b149c.json         a8b511c6-1674-4591-b0be-10635a461b5d.json         d46a530b-7b16-4948-bc2f-6b28774af5d8.json         f5cf6214-ad7a-474f-a1a2-b8bb46928447.json
+0a79cff6-4a38-4c5a-9fa3-f1616e8b149c.notify.json  a8b511c6-1674-4591-b0be-10635a461b5d.notify.json  d46a530b-7b16-4948-bc2f-6b28774af5d8.notify.json  f6ab440a-2ba5-461e-8d88-3b11ec51c68c.json
+13fa3272-df78-4496-8cee-0d31205697d5.json         b346901b-2da7-48a4-b71a-46efa69cc40c.json         e5107f50-dc0c-4235-b01c-02a97408f570.json         f6ab440a-2ba5-461e-8d88-3b11ec51c68c.notify.json
+13fa3272-df78-4496-8cee-0d31205697d5.notify.json  b346901b-2da7-48a4-b71a-46efa69cc40c.notify.json  e5107f50-dc0c-4235-b01c-02a97408f570.notify.json
+
+
+Here is and example:
+
+ [root@overcloud-controller-0 deployed]# cat a8b511c6-1674-4591-b0be-10635a461b5d.json | grep config
+  "config": "#!/bin/bash\nset -e\n\nfunction ping_retry() {\n  local IP_ADDR=$1\n  local TIMES=${2:-'10'}\n  local COUNT=0\n  local PING_CMD=ping\n  if [[ $IP_ADDR =~ \":\" ]]; then\n    PING_CMD=ping6\n  fi\n  until [ $COUNT -ge $TIMES ]; do\n    if $PING_CMD -w 300 -c 1 $IP_ADDR &> /dev/null; then\n      echo \"Ping to $IP_ADDR succeeded.\"\n      return 0\n    fi\n    echo \"Ping to $IP_ADDR failed. Retrying...\"\n    COUNT=$(($COUNT + 1))\n  done\n  return 1\n}\n\n# For each unique remote IP (specified via Heat) we check to\n# see if one of the locally configured networks matches and if so we\n# attempt a ping test the remote network IP.\nfunction ping_controller_ips() {\n  local REMOTE_IPS=$1\n  for REMOTE_IP in $(echo $REMOTE_IPS | sed -e \"s| |\\n|g\" | sort -u); do\n    if [[ $REMOTE_IP =~ \":\" ]]; then\n      networks=$(ip -6 r | grep -v default | cut -d \" \" -f 1 | grep -v \"unreachable\")\n    else\n      networks=$(ip r | grep -v default | cut -d \" \" -f 1)\n    fi\n    for LOCAL_NETWORK in $networks; do\n      in_network=$(python -c \"import ipaddr; net=ipaddr.IPNetwork('$LOCAL_NETWORK'); addr=ipaddr.IPAddress('$REMOTE_IP'); print(addr in net)\")\n      if [[ $in_network == \"True\" ]]; then\n        echo \"Trying to ping $REMOTE_IP for local network ${LOCAL_NETWORK}.\"\n        set +e\n        if ! ping_retry $REMOTE_IP; then\n          echo \"FAILURE\"\n          echo \"$REMOTE_IP is not pingable. Local Network: $LOCAL_NETWORK\" >&2\n          exit 1\n        fi\n        set -e\n        echo \"SUCCESS\"\n      fi\n    done\n  done\n}\n\n# Ping all default gateways. There should only be one\n# if using upstream t-h-t network templates but we test\n# all of them should some manual network config have\n# multiple gateways.\nfunction ping_default_gateways() {\n  DEFAULT_GW=$(ip r | grep ^default | cut -d \" \" -f 3)\n  set +e\n  for GW in $DEFAULT_GW; do\n    echo -n \"Trying to ping default gateway ${GW}...\"\n    if ! ping_retry $GW; then\n      echo \"FAILURE\"\n      echo \"$GW is not pingable.\"\n      exit 1\n    fi\n  done\n  set -e\n  echo \"SUCCESS\"\n}\n\nping_controller_ips \"$ping_test_ips\"\nping_default_gateways\n", 
+[root@overcloud-controller-0 deployed]# cat a8b511c6-1674-4591-b0be-10635a461b5d.notify.json 
+{
+  "deploy_stdout": "Trying to ping 10.0.0.58 for local network 10.0.0.0/24.\nPing to 10.0.0.58 succeeded.\nSUCCESS\nTrying to ping 192.168.101.150 for local network 192.168.101.0/24.\nPing to 192.168.101.150 succeeded.\nSUCCESS\nTrying to ping 192.168.1.151 for local network 192.168.1.0/24.\nPing to 192.168.1.151 succeeded.\nSUCCESS\nTrying to ping 192.168.2.152 for local network 192.168.2.0/24.\nPing to 192.168.2.152 succeeded.\nSUCCESS\nTrying to ping 192.168.3.161 for local network 192.168.3.0/24.\nPing to 192.168.3.161 succeeded.\nSUCCESS\nTrying to ping default gateway 192.168.101.1...Ping to 192.168.101.1 succeeded.\nSUCCESS\n", 
+  "deploy_stderr": "", 
+  "deploy_status_code": 0
+
+We can also check with the UUID the info of the software config on heat:
+
+ [stack@undercloud ~]$ heat config-list | grep -i a8b511c6-1674-4591-b0be-10635a461b5d
+WARNING (shell) "heat config-list" is deprecated, please use "openstack software config list" instead
+| a8b511c6-1674-4591-b0be-10635a461b5d | ControllerAllNodesValidationDeployment                                                                                            | script          | 2017-06-15T13:55:32Z |
+[stack@undercloud ~]$ heat config-show a8b511c6-1674-4591-b0be-10635a461b5d
+WARNING (shell) "heat config-show" is deprecated, please use "openstack software config show" instead
+{
+  "inputs": [
+    {
+      "default": "192.168.101.150 192.168.2.152 192.168.4.161 192.168.1.151 192.168.3.161 10.0.0.58", 
+      "type": "String", 
+      "name": "ping_test_ips", 
+      "value": "192.168.101.150 192.168.2.152 192.168.4.161 192.168.1.151 192.168.3.161 10.0.0.58", 
+      "description": ""
+    }, 
+
+
+
