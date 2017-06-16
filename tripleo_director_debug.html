@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="generator" content="Asciidoctor 1.5.4">
 <title>Tripleo/Director Debugging</title>
-<link href="https://fonts.googleapis.com/css?family=Ubuntu" rel="stylesheet"> 
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:300,300italic,400,400italic,600,600italic%7CNoto+Serif:400,400italic,700,700italic%7CDroid+Sans+Mono:400,700">
 <style>
 /* Asciidoctor default stylesheet | MIT License | http://asciidoctor.org */
 /* Remove comment around @import statement below when using as a custom stylesheet */
@@ -1076,6 +1076,15 @@ Target: iqn.2008-10.org.openstack:d8ee5249-a016-444f-bd02-77e422332381 (non-flas
 root      6715  1306  0 05:18 ?        00:00:00 sudo ironic-rootwrap /etc/ironic/rootwrap.conf dd if=/var/lib/ironic/images/e4cf9855-392c-40be-92b6-9b10674373d0/disk of=/dev/disk/by-path/ip-10.0.0.60:3260-iscsi-iqn.2008-10.org.openstack:e4cf9855-392c-40be-92b6-9b10674373d0-lun-1-part2 bs=1M oflag=direct
 root      6717  6715  0 05:18 ?        00:00:00 /usr/bin/python2 /usr/bin/ironic-rootwrap /etc/ironic/rootwrap.conf dd if=/var/lib/ironic/images/e4cf9855-392c-40be-92b6-9b10674373d0/disk of=/dev/disk/by-path/ip-10.0.0.60:3260-iscsi-iqn.2008-10.org.openstack:e4cf9855-392c-40be-92b6-9b10674373d0-lun-1-part2 bs=1M oflag=direct
 root      6719  6717  2 05:18 ?        00:00:00 /bin/dd if=/var/lib/ironic/images/e4cf9855-392c-40be-92b6-9b10674373d0/disk of=/dev/disk/by-path/ip-10.0.0.60:3260-iscsi-iqn.2008-10.org.openstack:e4cf9855-392c-40be-92b6-9b10674373d0-lun-1-part2 bs=1M oflag=direct</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>During this time, Nova is constantly polling Ironic to check whether the node has successfully deployed the overcloud image. It does this by checking the provision state of the node. Once it’s 'active', the deployment has been successful:</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> [root@undercloud ~]# grep -m 1 "Still waiting for ironic node" /var/log/nova/nova-compute.log
+2016-09-22 09:12:08.287 11893 DEBUG nova.virt.ironic.driver [-] [instance: 9fefdc3e-0247-4732-bad1-0a87c26a4251] Still waiting for ironic node 875921b3-9864-4aef-8d53-e6a69f2b1fde to unprovision: power_state="power on", target_power_state=None, provision_state="deleting", target_provision_state="available" _log_ironic_polling /usr/lib/python2.7/site-packages/nova/virt/ironic/driver.py:120</pre>
 </div>
 </div>
 <div class="paragraph">
@@ -2236,13 +2245,176 @@ rvicemctl stop os-collect-config.se</pre>
 <div class="paragraph">
 <p>After checking the controller nic-config templates, there was and identation error in the controller.yml file, with the vlan line in eth3 configuration, once the files where modified and the stack rerun the installation continued ok.</p>
 </div>
+<div class="paragraph">
+<p><strong>Checking info in /var/lib/heat-config</strong></p>
+</div>
+<div class="paragraph">
+<p>One dir that has a lot of deploy information is /var/lib/heat-config</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> [root@overcloud-controller-0 ~]# ls /var/lib/heat-config
+deployed  heat-config-puppet  heat-config-script</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>The deployed dir has all the software deployment json files and the values returned to heat , there are 2 tipes of files, the normal .json  file that has the software configuration deployment info and the notify.json files that have the information that is sent back to heat once the software configuration is run:</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> [root@overcloud-controller-0 ~]# ls /var/lib/heat-config/deployed/
+0a79cff6-4a38-4c5a-9fa3-f1616e8b149c.json         a8b511c6-1674-4591-b0be-10635a461b5d.json         d46a530b-7b16-4948-bc2f-6b28774af5d8.json         f5cf6214-ad7a-474f-a1a2-b8bb46928447.json
+0a79cff6-4a38-4c5a-9fa3-f1616e8b149c.notify.json  a8b511c6-1674-4591-b0be-10635a461b5d.notify.json  d46a530b-7b16-4948-bc2f-6b28774af5d8.notify.json  f6ab440a-2ba5-461e-8d88-3b11ec51c68c.json
+13fa3272-df78-4496-8cee-0d31205697d5.json         b346901b-2da7-48a4-b71a-46efa69cc40c.json         e5107f50-dc0c-4235-b01c-02a97408f570.json         f6ab440a-2ba5-461e-8d88-3b11ec51c68c.notify.json
+13fa3272-df78-4496-8cee-0d31205697d5.notify.json  b346901b-2da7-48a4-b71a-46efa69cc40c.notify.json  e5107f50-dc0c-4235-b01c-02a97408f570.notify.json</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Here is and example:</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> [root@overcloud-controller-0 deployed]# cat a8b511c6-1674-4591-b0be-10635a461b5d.json | grep config
+  "config": "#!/bin/bash\nset -e\n\nfunction ping_retry() {\n  local IP_ADDR=$1\n  local TIMES=${2:-'10'}\n  local COUNT=0\n  local PING_CMD=ping\n  if [[ $IP_ADDR =~ \":\" ]]; then\n    PING_CMD=ping6\n  fi\n  until [ $COUNT -ge $TIMES ]; do\n    if $PING_CMD -w 300 -c 1 $IP_ADDR &amp;&gt; /dev/null; then\n      echo \"Ping to $IP_ADDR succeeded.\"\n      return 0\n    fi\n    echo \"Ping to $IP_ADDR failed. Retrying...\"\n    COUNT=$(($COUNT + 1))\n  done\n  return 1\n}\n\n# For each unique remote IP (specified via Heat) we check to\n# see if one of the locally configured networks matches and if so we\n# attempt a ping test the remote network IP.\nfunction ping_controller_ips() {\n  local REMOTE_IPS=$1\n  for REMOTE_IP in $(echo $REMOTE_IPS | sed -e \"s| |\\n|g\" | sort -u); do\n    if [[ $REMOTE_IP =~ \":\" ]]; then\n      networks=$(ip -6 r | grep -v default | cut -d \" \" -f 1 | grep -v \"unreachable\")\n    else\n      networks=$(ip r | grep -v default | cut -d \" \" -f 1)\n    fi\n    for LOCAL_NETWORK in $networks; do\n      in_network=$(python -c \"import ipaddr; net=ipaddr.IPNetwork('$LOCAL_NETWORK'); addr=ipaddr.IPAddress('$REMOTE_IP'); print(addr in net)\")\n      if [[ $in_network == \"True\" ]]; then\n        echo \"Trying to ping $REMOTE_IP for local network ${LOCAL_NETWORK}.\"\n        set +e\n        if ! ping_retry $REMOTE_IP; then\n          echo \"FAILURE\"\n          echo \"$REMOTE_IP is not pingable. Local Network: $LOCAL_NETWORK\" &gt;&amp;2\n          exit 1\n        fi\n        set -e\n        echo \"SUCCESS\"\n      fi\n    done\n  done\n}\n\n# Ping all default gateways. There should only be one\n# if using upstream t-h-t network templates but we test\n# all of them should some manual network config have\n# multiple gateways.\nfunction ping_default_gateways() {\n  DEFAULT_GW=$(ip r | grep ^default | cut -d \" \" -f 3)\n  set +e\n  for GW in $DEFAULT_GW; do\n    echo -n \"Trying to ping default gateway ${GW}...\"\n    if ! ping_retry $GW; then\n      echo \"FAILURE\"\n      echo \"$GW is not pingable.\"\n      exit 1\n    fi\n  done\n  set -e\n  echo \"SUCCESS\"\n}\n\nping_controller_ips \"$ping_test_ips\"\nping_default_gateways\n",
+[root@overcloud-controller-0 deployed]# cat a8b511c6-1674-4591-b0be-10635a461b5d.notify.json
+{
+  "deploy_stdout": "Trying to ping 10.0.0.58 for local network 10.0.0.0/24.\nPing to 10.0.0.58 succeeded.\nSUCCESS\nTrying to ping 192.168.101.150 for local network 192.168.101.0/24.\nPing to 192.168.101.150 succeeded.\nSUCCESS\nTrying to ping 192.168.1.151 for local network 192.168.1.0/24.\nPing to 192.168.1.151 succeeded.\nSUCCESS\nTrying to ping 192.168.2.152 for local network 192.168.2.0/24.\nPing to 192.168.2.152 succeeded.\nSUCCESS\nTrying to ping 192.168.3.161 for local network 192.168.3.0/24.\nPing to 192.168.3.161 succeeded.\nSUCCESS\nTrying to ping default gateway 192.168.101.1...Ping to 192.168.101.1 succeeded.\nSUCCESS\n",
+  "deploy_stderr": "",
+  "deploy_status_code": 0</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>We can also check with the UUID the info of the software config on heat:</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> [stack@undercloud ~]$ heat config-list | grep -i a8b511c6-1674-4591-b0be-10635a461b5d
+WARNING (shell) "heat config-list" is deprecated, please use "openstack software config list" instead
+| a8b511c6-1674-4591-b0be-10635a461b5d | ControllerAllNodesValidationDeployment                                                                                            | script          | 2017-06-15T13:55:32Z |
+[stack@undercloud ~]$ heat config-show a8b511c6-1674-4591-b0be-10635a461b5d
+WARNING (shell) "heat config-show" is deprecated, please use "openstack software config show" instead
+{
+  "inputs": [
+    {
+      "default": "192.168.101.150 192.168.2.152 192.168.4.161 192.168.1.151 192.168.3.161 10.0.0.58",
+      "type": "String",
+      "name": "ping_test_ips",
+      "value": "192.168.101.150 192.168.2.152 192.168.4.161 192.168.1.151 192.168.3.161 10.0.0.58",
+      "description": ""
+    },</pre>
+</div>
+</div>
+<div class="paragraph">
+<p><strong>os-collect-config</strong></p>
+</div>
+<div class="paragraph">
+<p>This is a tool that starts at boot time, and continues to run via systemd. It’s primary responsibility is to monitor and download metadata from the Heat API. If the data has changed, it automatically calls os-refresh-config.
+Its configured at boot time by cloud-init that populates /etc/os-collect-config.conf with credentials and the metadata url of the undercloud.</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> [root@ctrl02 ~]# cat /etc/os-collect-config.conf
+ [DEFAULT]
+command = os-refresh-config --timeout 14400
+collectors = ec2
+collectors = request
+collectors = local
+ [request]
+metadata_url = http://10.0.0.10:8080/v1/AUTH_e6128b61cf7a4169a8f61cdf41a27344/ov-74kpxh4ucep-1-4sgqxt3uvuen-Controller-upu7hcpbqzlx/d5c2ea57-1c1c-4366-82f8-01acdded95e7?temp_url_sig=f64f4ea5483aca3caff9e3cf6a7ce2539cf352ef&amp;temp_url_expires=2147483586</pre>
+</div>
+</div>
+<div class="paragraph">
+<p><strong>os-refresh-config</strong></p>
+</div>
+<div class="paragraph">
+<p>os-collet-config calls another tool call os-refresh-config, among them you can see os-net-config, os-refresh-config doesn&#8217;t have a way to signal errors to heat, thats why failures like the ones in the network config don&#8217;t get reported back to heat, and you will have to wait for a timeout</p>
+</div>
+<div class="paragraph">
+<p>The important steps that os-refresh-config take are as follows:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>Apply systemctl configurables</p>
+</li>
+<li>
+<p>Run os-apply-config (see below)</p>
+</li>
+<li>
+<p>Configure the networking for the host</p>
+</li>
+<li>
+<p>Download and set the hieradata files for puppet parameters</p>
+</li>
+<li>
+<p>Configure /etc/hosts</p>
+</li>
+<li>
+<p>Deploy software configuration with Heat</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>It is within these scripts that the metadata downloaded by os-collect-config will be acted upon, these are this scripts that run</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> [root@ctrl01 ~]# ls -l /usr/libexec/os-refresh-config/configure.d/
+total 32
+-rwxr-xr-x. 1 root root   42 May  4 12:13 20-os-apply-config
+-rwxr-xr-x. 1 root root 3547 May  4 12:13 20-os-net-config
+-rwxr-xr-x. 1 root root  629 May  4 12:13 25-set-network-gateway
+-rwxr-xr-x. 1 root root 2830 May  4 12:13 40-hiera-datafiles
+-rwxr-xr-x. 1 root root  394 May  4 12:13 40-truncate-nova-config
+-rwxr-xr-x. 1 root root 1387 May  4 12:13 51-hosts
+-rwxr-xr-x. 1 root root 6575 Sep  8  2016 55-heat-config</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>If needed you can run the scripts by hand to get the output on screen for debugging purpouses.
+Heat seeds the SoftwareDeployment to the nodes in the form of metadata, and relies on os-collect-config to download it, and os-refresh-config to apply it.</p>
+</div>
+<div class="paragraph">
+<p><strong>Checking puppet in the overcloud nodes</strong></p>
+</div>
+<div class="paragraph">
+<p>The hieradata files are populated from metadata in heat by the 40-hiera-datafiles script that is run by os-refresh-config, it dumps thehieradata info in /etc/puppet/hieradata, it can be very usefull to check variable data in this dir, so for example we are wondering were this ip came from</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre>[root@ctrl01 hieradata]# pcs status | grep 192.168.2.190
+ip-192.168.2.190       (ocf::heartbeat:IPaddr2):       Started ctrl01</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>We can check in the hieradata files</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> root@ctrl01 hieradata]# grep 192.168.2.190 /etc/puppet/hieradata/vip_data.yaml
+redis_vip: 192.168.2.190
+tripleo::keepalived::redis_virtual_ip: 192.168.2.190</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Also service conf files variables, for example the endpoint on this host for the tenant vxlan tunnel</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> root@ctrl01 hieradata]# grep local_ip /etc/puppet/hieradata/service_configs.yaml
+neutron::agents::ml2::ovs::local_ip: 192.168.3.150</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Puppet code is run from dir "", if puppet is getting at some point we can kill the puppet process and run it by hand</p>
+</div>
 </div>
 </div>
 </div>
 </div>
 <div id="footer">
 <div id="footer-text">
-Last updated 2017-06-13 22:05:23 CEST
+Last updated 2017-06-17 00:39:39 CEST
 </div>
 </div>
 </body>
