@@ -316,6 +316,14 @@ We can also check in the logs the same process in the introspection logs
 2017-06-07 16:48:49.196 7354 INFO ironic_inspector.introspect [-] [node: 50fd27b6-7af7-425e-94b2-f6fb0f9f5bfa state starting] Whitelisting MAC's [u'aa:bb:cc:dd:ee:01'] on the firewall
 2017-06-07 16:48:51.688 7354 INFO ironic_inspector.introspect [-] [node: 50fd27b6-7af7-425e-94b2-f6fb0f9f5bfa state starting] The following attributes will be used for look up: {u'mac': [u'aa:bb:cc:dd:ee:01']}
 
+*Instropection Failure, Kill it*
+
+Sometimes introspection may fail. Unfortunately there is no good way of ending the process. To cancel introspection follow the following steps
+
+ [stack@undercloud ~]$ ironic node-set-power-state [NODE UUID] off
+[stack@undercloud ~]$ sudo rm /var/lib/ironic-discoverd/discoverd.sqlite
+[stack@undercloud ~]$ sudo systemctl restart openstack-ironic-discoverd
+
 
 == Deploy/Provsion phase 
 '''
@@ -1537,8 +1545,8 @@ Heat seeds the SoftwareDeployment to the nodes in the form of metadata, and reli
 
 The hieradata files are populated from metadata in heat by the 40-hiera-datafiles script that is run by os-refresh-config, it dumps thehieradata info in /etc/puppet/hieradata, it can be very usefull to check variable data in this dir, so for example we are wondering were this ip came from
 
- [root@ctrl01 hieradata]# pcs status | grep 192.168.2.190
- ip-192.168.2.190       (ocf::heartbeat:IPaddr2):       Started ctrl01
+`[root@ctrl01 hieradata]# pcs status | grep 192.168.2.190
+ip-192.168.2.190       (ocf::heartbeat:IPaddr2):       Started ctrl01`
 
 We can check in the hieradata files
 
@@ -1553,5 +1561,71 @@ neutron::agents::ml2::ovs::local_ip: 192.168.3.150
 
 
 Puppet code is run from dir "", if puppet is getting at some point we can kill the puppet process and run it by hand
+
+
+
+*Once we have our overcloud deployed protect it aginst unintentional removal*
+
+
+First, make a backup of the existing policy file:
+
+ undercloud$ sudo cp /etc/heat/policy.json /etc/heat/policy.json.orig
+
+Then, make it so that we deny everyone from removing the stack, even if you’re an admin. This means that the policy would have to be modified again for it to be deleted in the future (which may ensure that a higher privilege level is required for security and business continuity):
+
+ undercloud$ sudo grep -m1 stacks:delete /etc/heat/policy.json
+    "stacks:delete": "rule:deny_stack_user",
+undercloud$ sudo sed -i /stacks:delete/{s/rule:.*/'rule:deny_everybody",'/} /etc/heat/policy.json
+undercloud$ sudo grep -m1 stacks:delete /etc/heat/policy.json
+    "stacks:delete": "rule:deny_everybody",
+
+Then try to delete the overcloud stack:
+
+ undercloud$ source ~/stackrc
+undercloud$ openstack stack delete overcloud
+Are you sure you want to delete this stack(s) [y/N]? y
+Forbidden: overcloud
+Unable to delete 1 of the 1 stacks.
+
+As you can see heat prevents us from deleting the stac
+
+*Deleting and cleaning up the overcloud*
+
+As the stack user connect to the undercloud, and start by deleting the stack, using the --wait option is a good choice
+
+ stack@undercloud advanced]$ openstack stack delete overcloud --wait
+Are you sure you want to delete this stack(s) [y/N]? y
+2017-06-18 21:04:19Z [overcloud]: DELETE_IN_PROGRESS  Stack DELETE started
+2017-06-18 21:04:20Z [overcloud.BlockStorageSshKnownHostsDeployment]: DELETE_IN_PROGRESS  state changed
+
+With the deletion of the stack, it should have also freed up our "baremetal" nodes (our virtual machine based infrastructure for our overcloud) by powering them down via the Ironic pxe_ssh driver. When a node in ironic has been deleted, it reverts back to an 'available' and 'powered off' state. 
+
+ [stack@undercloud advanced]$ openstack baremetal list
+This command is deprecated. Instead, use 'openstack baremetal node list'.
++--------------------------------------+-----------------+---------------+-------------+--------------------+-------------+
+| UUID                                 | Name            | Instance UUID | Power State | Provisioning State | Maintenance |
++--------------------------------------+-----------------+---------------+-------------+--------------------+-------------+
+| 4ad48228-68b4-4d61-9abd-e414d7148621 | tricontroller01 | None          | power off   | available          | False       |
+| 04006063-8d62-4532-bad7-14913a518f4a | tricontroller02 | None          | power off   | available          | False       |
+| 00c212e2-1dd8-4518-9648-8150b8e327d2 | tricontroller03 | None          | power off   | available          | False       |
+| be734001-85c5-4e3c-a98a-5bb67d348522 | tricompute01    | None          | power off   | available          | False       |
++--------------------------------------+-----------------+---------------+-------------+--------------------+-------------+
+
+
+Delete the Mistral plan associated with the stack.
+
+ [stack@undercloud advanced]$ openstack overcloud plan delete overcloud
+Deleting plan overcloud...
+
+Delete the supporting files related to the previous installation.
+
+ [stack@undercloud advanced]$ rm overcloudrc overcloud-env.json
+
+With that you have removed your overcloud if you need to go further and delete the ironic nodes you can do
+
+for uuid in $(ironic node-list | grep -v UUID | awk -F'|' '{ print $2}' | xargs`) ; do
+    ironic node-set-maintenance $uuid false
+    ironic node-delete $uuid
+done
 
 

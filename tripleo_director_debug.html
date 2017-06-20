@@ -2380,11 +2380,9 @@ Heat seeds the SoftwareDeployment to the nodes in the form of metadata, and reli
 <div class="paragraph">
 <p>The hieradata files are populated from metadata in heat by the 40-hiera-datafiles script that is run by os-refresh-config, it dumps thehieradata info in /etc/puppet/hieradata, it can be very usefull to check variable data in this dir, so for example we are wondering were this ip came from</p>
 </div>
-<div class="literalblock">
-<div class="content">
-<pre>[root@ctrl01 hieradata]# pcs status | grep 192.168.2.190
-ip-192.168.2.190       (ocf::heartbeat:IPaddr2):       Started ctrl01</pre>
-</div>
+<div class="paragraph">
+<p><code>[root@ctrl01 hieradata]# pcs status | grep 192.168.2.190
+ip-192.168.2.190       (ocf::heartbeat:IPaddr2):       Started ctrl01</code></p>
 </div>
 <div class="paragraph">
 <p>We can check in the hieradata files</p>
@@ -2414,7 +2412,7 @@ neutron::agents::ml2::ovs::local_ip: 192.168.3.150</pre>
 </div>
 <div id="footer">
 <div id="footer-text">
-Last updated 2017-06-17 00:39:39 CEST
+Last updated 2017-06-17 01:02:52 CEST
 </div>
 </div>
 </body>
