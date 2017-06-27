@@ -499,6 +499,21 @@ TODO
 The os-net-config github has a sample dir with all the combinations that are supported by os-net-config and you can use those examples directly in your net-config/ yaml templates
 http://git.openstack.org/cgit/openstack/os-net-config/tree/etc/os-net-config/samples
 
+*Overcloud Domain Name in the templates*
+
+To specify the domain name for the overcloud nodes we have to add to our templates the CloudDomain: localexample.com , we can also add the fqdn of our vip services/ips, for example:
+
+ [stack@under templates]$ cat network-environment.yaml | grep -i Cloud
+  CloudName: openstack.localexample.com
+  CloudNameInternal: overcloud.internalapi.localexample.com
+  CloudNameCtlplane: overcloud.ctlplane.localexample.com
+  CloudDomain: localexample.com
+
+The problem is that currently cloud-init overrides the CloudDomain info, so until there is a final solution as a workaround we have to set the dhcp_domain to match CloudDomain in nova.conf
+
+ https://bugs.launchpad.net/tripleo/+bug/1581472
+
+
 === Mistral Plans Debug
 
 *The Mistral log is very detailed and useful for in depth debugging*
@@ -688,8 +703,6 @@ http://tripleo.org/mistral-api/mistral-api.html
 
 
 
-
-TODO
 
 === Overcloud Deploy Debug
 
@@ -1562,14 +1575,6 @@ neutron::agents::ml2::ovs::local_ip: 192.168.3.150
 
 Puppet code is run from dir "", if puppet is getting at some point we can kill the puppet process and run it by hand
 
-
-
-*Once we have our overcloud deployed protect it aginst unintentional removal*
-
-
-First, make a backup of the existing policy file:
-
- undercloud$ sudo cp /etc/heat/policy.json /etc/heat/policy.json.orig
 
 Then, make it so that we deny everyone from removing the stack, even if you’re an admin. This means that the policy would have to be modified again for it to be deleted in the future (which may ensure that a higher privilege level is required for security and business continuity):
 
