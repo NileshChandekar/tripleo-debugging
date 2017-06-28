@@ -13,13 +13,29 @@
  - Memory:  64G 
  - Network : 10G for provisioning
 
-*undercloud.conf recommended options*
+*undercloud.conf options*
 
 -----
 undercloud_debug = false  -->  only enable debug if needed
-enable_telemetry = false  -->  disable telemetry
+enable_telemetry = false  -->  disable telemetry if its not needed
 automated_clean = true    --> (is osp11 as clean_nodes=true) runs wipefs --force --all before making node available
+enable_tempest = true     --> if you want to certifie your overcloud after deploy
+enable_ui = false         --> tripleo UI
+enable_validations = true --> Overcloud Ansible Validations
+enabled_drivers = pxe_ipmitool,pxe_drac --> if you need to enable a specific driver
 -----
+
+You can also override hieradata of the undercloud install,undercloud.conf
+
+ hieradata_override = /home/stack/hieradata-override.yaml
+
+And in the override file for example
+
+ cat > /home/stack/hieradata-override.yaml << __EOF__
+neutron::dns_domain: example.com
+nova::network::neutron::dhcp_domain: example.com
+__EOF__
+
 
 *Undercloud tunning*
 
