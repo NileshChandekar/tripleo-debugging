@@ -479,13 +479,36 @@ body.book #toc,body.book #preamble,body.book h1.sect0,body.book .sect1>h2{page-b
 </ul>
 </div>
 <div class="paragraph">
-<p><strong>undercloud.conf recommended options</strong></p>
+<p><strong>undercloud.conf options</strong></p>
 </div>
 <div class="listingblock">
 <div class="content">
 <pre>undercloud_debug = false  --&gt;  only enable debug if needed
-enable_telemetry = false  --&gt;  disable telemetry
-automated_clean = true    --&gt; (is osp11 as clean_nodes=true) runs wipefs --force --all before making node available</pre>
+enable_telemetry = false  --&gt;  disable telemetry if its not needed
+automated_clean = true    --&gt; (is osp11 as clean_nodes=true) runs wipefs --force --all before making node available
+enable_tempest = true     --&gt; if you want to certifie your overcloud after deploy
+enable_ui = false         --&gt; tripleo UI
+enable_validations = true --&gt; Overcloud Ansible Validations
+enabled_drivers = pxe_ipmitool,pxe_drac --&gt; if you need to enable a specific driver</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>You can also override hieradata of the undercloud install,undercloud.conf</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre>hieradata_override = /home/stack/hieradata-override.yaml</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>And in the override file for example</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> cat &gt; /home/stack/hieradata-override.yaml &lt;&lt; __EOF__
+neutron::dns_domain: example.com
+nova::network::neutron::dhcp_domain: example.com
+__EOF__</pre>
 </div>
 </div>
 <div class="paragraph">
@@ -904,6 +927,19 @@ ACCEPT     all  --  0.0.0.0/0            0.0.0.0/0</pre>
 2017-06-07 16:48:51.688 7354 INFO ironic_inspector.introspect [-] [node: 50fd27b6-7af7-425e-94b2-f6fb0f9f5bfa state starting] The following attributes will be used for look up: {u'mac': [u'aa:bb:cc:dd:ee:01']}</pre>
 </div>
 </div>
+<div class="paragraph">
+<p><strong>Instropection Failure, Kill it</strong></p>
+</div>
+<div class="paragraph">
+<p>Sometimes introspection may fail. Unfortunately there is no good way of ending the process. To cancel introspection follow the following steps</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> [stack@undercloud ~]$ ironic node-set-power-state [NODE UUID] off
+[stack@undercloud ~]$ sudo rm /var/lib/ironic-discoverd/discoverd.sqlite
+[stack@undercloud ~]$ sudo systemctl restart openstack-ironic-discoverd</pre>
+</div>
+</div>
 </div>
 </div>
 </div>
@@ -1156,6 +1192,29 @@ root      6719  6717  2 05:18 ?        00:00:00 /bin/dd if=/var/lib/ironic/image
 <p>The os-net-config github has a sample dir with all the combinations that are supported by os-net-config and you can use those examples directly in your net-config/ yaml templates
 <a href="http://git.openstack.org/cgit/openstack/os-net-config/tree/etc/os-net-config/samples" class="bare">http://git.openstack.org/cgit/openstack/os-net-config/tree/etc/os-net-config/samples</a></p>
 </div>
+<div class="paragraph">
+<p><strong>Overcloud Domain Name in the templates</strong></p>
+</div>
+<div class="paragraph">
+<p>To specify the domain name for the overcloud nodes we have to add to our templates the CloudDomain: localexample.com , we can also add the fqdn of our vip services/ips, for example:</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre>[stack@under templates]$ cat network-environment.yaml | grep -i Cloud
+ CloudName: openstack.localexample.com
+ CloudNameInternal: overcloud.internalapi.localexample.com
+ CloudNameCtlplane: overcloud.ctlplane.localexample.com
+ CloudDomain: localexample.com</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>The problem is that currently cloud-init overrides the CloudDomain info, so until there is a final solution as a workaround we have to set the dhcp_domain to match CloudDomain in nova.conf</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre>https://bugs.launchpad.net/tripleo/+bug/1581472</pre>
+</div>
+</div>
 </div>
 <div class="sect2">
 <h3 id="_mistral_plans_debug">Mistral Plans Debug</h3>
@@ -1391,9 +1450,6 @@ network/scripts/run-os-net-config.sh</pre>
 </div>
 <div class="paragraph">
 <p><a href="http://tripleo.org/mistral-api/mistral-api.html" class="bare">http://tripleo.org/mistral-api/mistral-api.html</a></p>
-</div>
-<div class="paragraph">
-<p>TODO</p>
 </div>
 </div>
 <div class="sect2">
@@ -2406,13 +2462,130 @@ neutron::agents::ml2::ovs::local_ip: 192.168.3.150</pre>
 <div class="paragraph">
 <p>Puppet code is run from dir "", if puppet is getting at some point we can kill the puppet process and run it by hand</p>
 </div>
+<div class="paragraph">
+<p>Then, make it so that we deny everyone from removing the stack, even if you’re an admin. This means that the policy would have to be modified again for it to be deleted in the future (which may ensure that a higher privilege level is required for security and business continuity):</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> undercloud$ sudo grep -m1 stacks:delete /etc/heat/policy.json
+    "stacks:delete": "rule:deny_stack_user",
+undercloud$ sudo sed -i /stacks:delete/{s/rule:.*/'rule:deny_everybody",'/} /etc/heat/policy.json
+undercloud$ sudo grep -m1 stacks:delete /etc/heat/policy.json
+    "stacks:delete": "rule:deny_everybody",</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Then try to delete the overcloud stack:</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> undercloud$ source ~/stackrc
+undercloud$ openstack stack delete overcloud
+Are you sure you want to delete this stack(s) [y/N]? y
+Forbidden: overcloud
+Unable to delete 1 of the 1 stacks.</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>As you can see heat prevents us from deleting the stac</p>
+</div>
+<div class="paragraph">
+<p><strong>Deleting and cleaning up the overcloud</strong></p>
+</div>
+<div class="paragraph">
+<p>As the stack user connect to the undercloud, and start by deleting the stack, using the --wait option is a good choice</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> stack@undercloud advanced]$ openstack stack delete overcloud --wait
+Are you sure you want to delete this stack(s) [y/N]? y
+2017-06-18 21:04:19Z [overcloud]: DELETE_IN_PROGRESS  Stack DELETE started
+2017-06-18 21:04:20Z [overcloud.BlockStorageSshKnownHostsDeployment]: DELETE_IN_PROGRESS  state changed</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>With the deletion of the stack, it should have also freed up our "baremetal" nodes (our virtual machine based infrastructure for our overcloud) by powering them down via the Ironic pxe_ssh driver. When a node in ironic has been deleted, it reverts back to an 'available' and 'powered off' state.</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> [stack@undercloud advanced]$ openstack baremetal list
+This command is deprecated. Instead, use 'openstack baremetal node list'.
++--------------------------------------+-----------------+---------------+-------------+--------------------+-------------+
+| UUID                                 | Name            | Instance UUID | Power State | Provisioning State | Maintenance |
++--------------------------------------+-----------------+---------------+-------------+--------------------+-------------+
+| 4ad48228-68b4-4d61-9abd-e414d7148621 | tricontroller01 | None          | power off   | available          | False       |
+| 04006063-8d62-4532-bad7-14913a518f4a | tricontroller02 | None          | power off   | available          | False       |
+| 00c212e2-1dd8-4518-9648-8150b8e327d2 | tricontroller03 | None          | power off   | available          | False       |
+| be734001-85c5-4e3c-a98a-5bb67d348522 | tricompute01    | None          | power off   | available          | False       |
++--------------------------------------+-----------------+---------------+-------------+--------------------+-------------+</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Delete the Mistral plan associated with the stack.</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> [stack@undercloud advanced]$ openstack overcloud plan delete overcloud
+Deleting plan overcloud...</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Delete the supporting files related to the previous installation.</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre>[stack@undercloud advanced]$ rm overcloudrc overcloud-env.json</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>With that you have removed your overcloud if you need to go further and delete the ironic nodes you can do</p>
+</div>
+<div class="paragraph">
+<p>for uuid in $(ironic node-list | grep -v UUID | awk -F'|' '{ print $2}' | xargs`) ; do
+    ironic node-set-maintenance $uuid false
+    ironic node-delete $uuid
+done</p>
+</div>
+<div class="paragraph">
+<p><strong>ironic nde-list shows Instance UUID even after deleting the stack</strong></p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre> [stack@instack ~]$ heat stack-list
++----+------------+--------------+---------------+--------------+
+| id | stack_name | stack_status | creation_time | updated_time |
++----+------------+--------------+---------------+--------------+
++----+------------+--------------+---------------+--------------+
+[stack@instack ~]$ nova list
++----+------+--------+------------+-------------+----------+
+| ID | Name | Status | Task State | Power State | Networks |
++----+------+--------+------------+-------------+----------+
++----+------+--------+------------+-------------+----------+
+[stack@instack ~]$ ironic node-list
++--------------------------------------+------+--------------------------------------+-------------+--------------------+-------------+
+| UUID                                 | Name | Instance UUID                        | Power State | Provisioning State | Maintenance |
++--------------------------------------+------+--------------------------------------+-------------+--------------------+-------------+
+| 9e57d620-3ec5-4b5e-96b1-bf56cce43411 | None | 1b7a6e50-3c15-4228-85d4-1f666a200ad5 | power off   | available          | False       |
+| 88b73085-1c8e-4b6d-bd0b-b876060e2e81 | None | 31196811-ee42-4df7-b8e2-6c83a716f5d9 | power off   | available          | False       |
+| d3ac9b50-bfe4-435b-a6f8-05545cd4a629 | None | 2b962287-6e1f-4f75-8991-46b3fa01e942 | power off   | available          | False       |
++--------------------------------------+------+--------------------------------------+-------------+--------------------+-------------+</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>We can use ironic node-update &lt;node_uuid&gt; remove instance_uuid</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre>ironic node-update 9e57d620-3ec5-4b5e-96b1-bf56cce43411 remove instance_uuid</pre>
+</div>
+</div>
 </div>
 </div>
 </div>
 </div>
 <div id="footer">
 <div id="footer-text">
-Last updated 2017-06-17 01:02:52 CEST
+Last updated 2017-06-30 11:47:47 CEST
 </div>
 </div>
 </body>
