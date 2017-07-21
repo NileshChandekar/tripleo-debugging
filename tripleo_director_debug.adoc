@@ -1675,3 +1675,8 @@ We can use ironic node-update <node_uuid> remove instance_uuid
 
  ironic node-update 9e57d620-3ec5-4b5e-96b1-bf56cce43411 remove instance_uuid
 
+There are also times in OSP10 when nodes remain in active state after the stack has been deleted(bz: 1263186)
+
+
+
+
