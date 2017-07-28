@@ -727,11 +727,11 @@ b.conum * { color: inherit !important; }
 </li>
 <li><a href="#_introspection">Introspection</a>
 <ul class="sectlevel2">
-<li><a href="#_introspection_recomendations">Introspection Recomendations</a></li>
+<li><a href="#_introspection_recommendations">Introspection Recommendations</a></li>
 <li><a href="#_introspection_debug">Introspection Debug</a></li>
 </ul>
 </li>
-<li><a href="#_deploy_provsion_phase">Deploy/Provsion phase</a>
+<li><a href="#_deploy_provision_phase">Deploy/Provision phase</a>
 <ul class="sectlevel2">
 <li><a href="#_deploy_phase_recommendations">Deploy phase recommendations</a></li>
 <li><a href="#_deploy_phase_debug">Deploy phase Debug</a></li>
@@ -807,7 +807,7 @@ __EOF__</pre>
 </div>
 </div>
 <div class="paragraph">
-<p><strong>Undercloud tunning</strong></p>
+<p><strong>Undercloud tuning</strong></p>
 </div>
 <div class="paragraph">
 <p>Keystone worker counts: increase the worker count to available cpus/2 if you have enough ram</p>
@@ -864,7 +864,7 @@ This command is deprecated. Instead, use 'openstack baremetal node list'.
 </div>
 </div>
 <div class="paragraph">
-<p>Check the ironic-conductor.log for problems comunicating the IPMI/ilo/drac BMC platforms:</p>
+<p>Check the ironic-conductor.log for problems communicating the IPMI/ilo/drac BMC platforms:</p>
 </div>
 <div class="literalblock">
 <div class="content">
@@ -885,7 +885,7 @@ This command is deprecated. Instead, use 'openstack baremetal node list'.
 <div class="sectionbody">
 <hr>
 <div class="sect2">
-<h3 id="_introspection_recomendations">Introspection Recomendations</h3>
+<h3 id="_introspection_recommendations">Introspection Recommendations</h3>
 <div class="ulist">
 <ul>
 <li>
@@ -969,7 +969,7 @@ boot</pre>
 </div>
 </div>
 <div class="paragraph">
-<p>We can see the options we added to the cmdline being lodaded on the next ram disk run</p>
+<p>We can see the options we added to the cmdline being loaded on the next ram disk run</p>
 </div>
 <div class="literalblock">
 <div class="content">
@@ -994,7 +994,7 @@ bin  boot  dev  etc  home  init  lib  lib64  lost+found  media  mnt  opt  proc  
 </div>
 </div>
 <div class="paragraph">
-<p>After modifiying the image, we zip it again and move it into the httpboot dir</p>
+<p>After modifying the image, we zip it again and move it into the httpboot dir</p>
 </div>
 <div class="literalblock">
 <div class="content">
@@ -1166,7 +1166,7 @@ dhcp-boot=undionly.kpxe,localhost.localdomain,10.0.0.10</pre>
 <p><strong>If the Dhcp client isn&#8217;t able to comunicate with the Dhcp server</strong></p>
 </div>
 <div class="paragraph">
-<p>Check that the client Mac is getting whitelisted in Iptables, We can look for the the mac address of the overcloud node that we are going to introspect, in this case the node uid is <strong>50fd27b6-7af7-425e-94b2-f6fb0f9f5bfa</strong> with mac <strong>aa:bb:cc:dd:ee:01</strong></p>
+<p>Check that the client Mac is getting whitelisted in Iptables, We can look for the mac address of the overcloud node that we are going to introspect, in this case the node uid is <strong>50fd27b6-7af7-425e-94b2-f6fb0f9f5bfa</strong> with mac <strong>aa:bb:cc:dd:ee:01</strong></p>
 </div>
 <div class="literalblock">
 <div class="content">
@@ -1222,7 +1222,7 @@ ACCEPT     all  --  0.0.0.0/0            0.0.0.0/0</pre>
 </div>
 </div>
 <div class="paragraph">
-<p><strong>Instropection Failure, Kill it</strong></p>
+<p><strong>Introspection Failure, Kill it</strong></p>
 </div>
 <div class="paragraph">
 <p>Sometimes introspection may fail. Unfortunately there is no good way of ending the process. To cancel introspection follow the following steps</p>
@@ -1238,7 +1238,7 @@ ACCEPT     all  --  0.0.0.0/0            0.0.0.0/0</pre>
 </div>
 </div>
 <div class="sect1">
-<h2 id="_deploy_provsion_phase">Deploy/Provsion phase</h2>
+<h2 id="_deploy_provision_phase">Deploy/Provision phase</h2>
 <div class="sectionbody">
 <hr>
 <div class="sect2">
@@ -1276,7 +1276,7 @@ ACCEPT     all  --  0.0.0.0/0            0.0.0.0/0</pre>
 <div class="sect2">
 <h3 id="_deploy_phase_debug">Deploy phase Debug</h3>
 <div class="paragraph">
-<p>In this context we consider deploy the Phase during wich the overcloud image is copied to the local overcloud nodes, this is done booting the undercloud nodes via ipxe to load a ramdisk, then exporting the local root disk as a iscsi target to the undercloud node, and then the overcloud image gets copied via dd</p>
+<p>In this context we consider deploy the Phase during which the overcloud image is copied to the local overcloud nodes, this is done booting the undercloud nodes via ipxe to load a ramdisk, then exporting the local root disk as a iscsi target to the undercloud node, and then the overcloud image gets copied via dd</p>
 </div>
 <div class="paragraph">
 <p><strong>Deploy Logs</strong></p>
@@ -1300,7 +1300,7 @@ drwxr-xr-x. 2 ironic ironic 4096 Jun  5 02:48 /var/log/ironic/deploy/</pre>
 </div>
 </div>
 <div class="paragraph">
-<p>Inside the dir you can find a tarball named after the UID of the overcloud node, the journal file contais the output of the run</p>
+<p>Inside the dir you can find a tarball named after the UID of the overcloud node, the journal file contains the output of the run</p>
 </div>
 <div class="literalblock">
 <div class="content">
@@ -1535,7 +1535,7 @@ root      6719  6717  2 05:18 ?        00:00:00 /bin/dd if=/var/lib/ironic/image
 </div>
 </div>
 <div class="paragraph">
-<p>Here is and example, we can check  the exection-list</p>
+<p>Here is and example, we can check  the execution-list</p>
 </div>
 <div class="literalblock">
 <div class="content">
@@ -1609,7 +1609,7 @@ tripleo.baremetal.v1.introspect</pre>
 </div>
 </div>
 <div class="paragraph">
-<p>We can then use the mistral workflow-get command to se the input parameters needed by the workflow, we are going to use the tripleo.baremetal.v1.provide_manageable_nodes , this simply list ironic nodes in manageable state</p>
+<p>We can then use the mistral workflow-get command to list the input parameters needed by the workflow, we are going to use the tripleo.baremetal.v1.provide_manageable_nodes , this simply list ironic nodes in manageable state</p>
 </div>
 <div class="literalblock">
 <div class="content">
@@ -1912,7 +1912,7 @@ WARNING (shell) "heat stack-list" is deprecated, please use "openstack stack lis
 </div>
 </div>
 <div class="paragraph">
-<p>We can also use the deploy show to get output of the failed command, here we can see as input valus the configuration of the br-ex bridge with nic1</p>
+<p>We can also use the deploy show to get output of the failed command, here we can see as input values the configuration of the br-ex bridge with nic1</p>
 </div>
 <div class="literalblock">
 <div class="content">
@@ -2593,7 +2593,7 @@ rvicemctl stop os-collect-config.se</pre>
 </div>
 </div>
 <div class="paragraph">
-<p>After checking the controller nic-config templates, there was and identation error in the controller.yml file, with the vlan line in eth3 configuration, once the files where modified and the stack rerun the installation continued ok.</p>
+<p>After checking the controller nic-config templates, there was and indentation error in the controller.yml file, with the vlan line in eth3 configuration, once the files where modified and the stack rerun the installation continued ok.</p>
 </div>
 <div class="paragraph">
 <p><strong>Checking info in /var/lib/heat-config</strong></p>
@@ -2677,7 +2677,7 @@ metadata_url = http://10.0.0.10:8080/v1/AUTH_e6128b61cf7a4169a8f61cdf41a27344/ov
 <p><strong>os-refresh-config</strong></p>
 </div>
 <div class="paragraph">
-<p>os-collet-config calls another tool call os-refresh-config, among them you can see os-net-config, os-refresh-config doesn&#8217;t have a way to signal errors to heat, thats why failures like the ones in the network config don&#8217;t get reported back to heat, and you will have to wait for a timeout</p>
+<p>os-collet-config calls another tool call os-refresh-config, among them you can see os-net-config, os-refresh-config doesn&#8217;t have a way to signal errors to heat, that&#8217;s why failures like the ones in the network config don&#8217;t get reported back to heat, and you will have to wait for a timeout</p>
 </div>
 <div class="paragraph">
 <p>The important steps that os-refresh-config take are as follows:</p>
@@ -2721,14 +2721,14 @@ total 32
 </div>
 </div>
 <div class="paragraph">
-<p>If needed you can run the scripts by hand to get the output on screen for debugging purpouses.
+<p>If needed you can run the scripts by hand to get the output on screen for debugging purposes.
 Heat seeds the SoftwareDeployment to the nodes in the form of metadata, and relies on os-collect-config to download it, and os-refresh-config to apply it.</p>
 </div>
 <div class="paragraph">
 <p><strong>Checking puppet in the overcloud nodes</strong></p>
 </div>
 <div class="paragraph">
-<p>The hieradata files are populated from metadata in heat by the 40-hiera-datafiles script that is run by os-refresh-config, it dumps thehieradata info in /etc/puppet/hieradata, it can be very usefull to check variable data in this dir, so for example we are wondering were this ip came from</p>
+<p>The hieradata files are populated from metadata in heat by the 40-hiera-datafiles script that is run by os-refresh-config, it dumps thehieradata info in /etc/puppet/hieradata, it can be very useful to check variable data in this dir, so for example we are wondering were this ip came from</p>
 </div>
 <div class="literalblock">
 <div class="content">
@@ -2845,7 +2845,7 @@ done</pre>
 </div>
 </div>
 <div class="paragraph">
-<p><strong>ironic nde-list shows Instance UUID even after deleting the stack</strong></p>
+<p><strong>ironic node-list shows Instance UUID even after deleting the stack</strong></p>
 </div>
 <div class="literalblock">
 <div class="content">
@@ -2886,7 +2886,7 @@ done</pre>
 </div>
 <div id="footer">
 <div id="footer-text">
-Last updated 2017-07-28 12:42:14 CEST
+Last updated 2017-07-28 13:22:21 CEST
 </div>
 </div>
 </body>
