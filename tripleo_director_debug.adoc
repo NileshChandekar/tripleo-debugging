@@ -37,7 +37,7 @@ nova::network::neutron::dhcp_domain: example.com
 __EOF__
 
 
-*Undercloud tunning*
+*Undercloud tuning*
 
 Keystone worker counts: increase the worker count to available cpus/2 if you have enough ram
 
@@ -78,7 +78,7 @@ This command is deprecated. Instead, use 'openstack baremetal node list'.
 | 6a05da8a-5963-4a19-a419-e71ef684e3e9 | None | None          | None        | enroll             | False       |
 +--------------------------------------+------+---------------+-------------+--------------------+-------------+
 
-Check the ironic-conductor.log for problems comunicating the IPMI/ilo/drac BMC platforms:
+Check the ironic-conductor.log for problems communicating the IPMI/ilo/drac BMC platforms:
 
  2017-06-11 10:27:14.977 10009 ERROR ironic.conductor.manager [req-afc9a72c-58bf-4fd0-a23d-d8d43905bbde - - - - -] Failed to validate power driver interface for node 149a4a65-739c-4599-823c-cf0c6dbcd37c. Error: SSH connection cannot be established: Failed to establish SSH connection to host 192.168.101.1.
 2017-06-11 10:27:14.984 10009 ERROR ironic.conductor.manager [req-f614ec7f-e7f0-4231-97b7-65ee3f248110 - - - - -] Failed to validate power driver interface for node 6a05da8a-5963-4a19-a419-e71ef684e3e9. Error: SSH connection cannot be established: Failed to establish SSH connection to host 192.168.101.1.
@@ -91,7 +91,7 @@ Fix the problem with the BMC connection, and rerun the baremetal import command 
 == Introspection
 '''
 
-=== Introspection Recomendations
+=== Introspection Recommendations
    - Try small instrospection bundles first.
    - Do not introspect more nodes than your DHCP range allows.
    - After introspection, wait for about two minutes to let DHCP leases to expire.
@@ -150,7 +150,7 @@ Edit /httpboot/inspector.ipxe manually. Find the line starting with “kernel”
  boot
 
 
-We can see the options we added to the cmdline being lodaded on the next ram disk run
+We can see the options we added to the cmdline being loaded on the next ram disk run
 
  ramdisk/journal:Jun 07 09:14:38 localhost.localdomain kernel: Command line: ipa-inspection-callback-url=http://10.0.0.10:5050/v1/continue ipa-inspection-collectors=default,extra-hardware,logs systemd.journald.forward_to_console=yes BOOTIF=aa:bb:cc:dd:ee:02 ipa-inspection-dhcp-all-interfaces=1 ipa-collect-lldp=1 initrd=agent.ramdisk rootpwd="$1$UQ/HlKRP$pXaAJKgSS7z7SPqOTH0FV/" selinux=0
 
@@ -166,7 +166,7 @@ If you need to modify the ramdisk image to fix some issue you can follow these s
  [root@undercloud agent.ramdisk.dir]# ls
  bin  boot  dev  etc  home  init  lib  lib64  lost+found  media  mnt  opt  proc  root  run  sbin  srv  sys  tmp  usr  var
 
-After modifiying the image, we zip it again and move it into the httpboot dir
+After modifying the image, we zip it again and move it into the httpboot dir
 
  [root@undercloud httpboot]# find . | cpio -oc | gzip -c -9>| ~/agent.ramdisk.root-test
  [root@undercloud httpboot]# cp ~/agent.ramdisk.root-test /httpboot/agent.ramdisk
@@ -287,7 +287,7 @@ Tcpdump filter to capture packets sent by the client (DISCOVER, REQUEST, INFORM)
 
 *If the Dhcp client isn't able to comunicate with the Dhcp server*
 
-Check that the client Mac is getting whitelisted in Iptables, We can look for the the mac address of the overcloud node that we are going to introspect, in this case the node uid is *50fd27b6-7af7-425e-94b2-f6fb0f9f5bfa* with mac *aa:bb:cc:dd:ee:01*
+Check that the client Mac is getting whitelisted in Iptables, We can look for the mac address of the overcloud node that we are going to introspect, in this case the node uid is *50fd27b6-7af7-425e-94b2-f6fb0f9f5bfa* with mac *aa:bb:cc:dd:ee:01*
 
  [root@undercloud ~]# openstack baremetal port list
 +--------------------------------------+-------------------+
@@ -331,7 +331,7 @@ We can also check in the logs the same process in the introspection logs
 2017-06-07 16:48:49.196 7354 INFO ironic_inspector.introspect [-] [node: 50fd27b6-7af7-425e-94b2-f6fb0f9f5bfa state starting] Whitelisting MAC's [u'aa:bb:cc:dd:ee:01'] on the firewall
 2017-06-07 16:48:51.688 7354 INFO ironic_inspector.introspect [-] [node: 50fd27b6-7af7-425e-94b2-f6fb0f9f5bfa state starting] The following attributes will be used for look up: {u'mac': [u'aa:bb:cc:dd:ee:01']}
 
-*Instropection Failure, Kill it*
+*Introspection Failure, Kill it*
 
 Sometimes introspection may fail. Unfortunately there is no good way of ending the process. To cancel introspection follow the following steps
 
@@ -340,7 +340,7 @@ Sometimes introspection may fail. Unfortunately there is no good way of ending t
 [stack@undercloud ~]$ sudo systemctl restart openstack-ironic-discoverd
 
 
-== Deploy/Provsion phase 
+== Deploy/Provision phase 
 '''
 
 === Deploy phase recommendations
@@ -365,7 +365,7 @@ Before redeployment, verify that unused nodes are OFF Use DRAC/iLO to check powe
 
 === Deploy phase Debug 
 
-In this context we consider deploy the Phase during wich the overcloud image is copied to the local overcloud nodes, this is done booting the undercloud nodes via ipxe to load a ramdisk, then exporting the local root disk as a iscsi target to the undercloud node, and then the overcloud image gets copied via dd
+In this context we consider deploy the Phase during which the overcloud image is copied to the local overcloud nodes, this is done booting the undercloud nodes via ipxe to load a ramdisk, then exporting the local root disk as a iscsi target to the undercloud node, and then the overcloud image gets copied via dd
 
 *Deploy Logs*
 
@@ -381,7 +381,7 @@ If you need to check the ramdisk run log output, it is saved in  /var/log/ironic
  [root@undercloud ironic]# ls -ld  /var/log/ironic/deploy/
 drwxr-xr-x. 2 ironic ironic 4096 Jun  5 02:48 /var/log/ironic/deploy/
 
-Inside the dir you can find a tarball named after the UID of the overcloud node, the journal file contais the output of the run
+Inside the dir you can find a tarball named after the UID of the overcloud node, the journal file contains the output of the run
 
  [root@undercloud ironic]# ls -l  /var/log/ironic/deploy/*tar.gz
 -rw-r--r--. 1 ironic ironic 17573 Jun  5 02:48 /var/log/ironic/deploy/d8ee5249-a016-444f-bd02-77e422332381_32068670-ef4e-4699-911f-6c0ed4da541c_2017-06-05-06:48:24.tar.gz
@@ -545,7 +545,7 @@ The problem is that currently cloud-init overrides the CloudDomain info, so unti
 [root@undercloud ~]# mistral action-execution-list
 [root@undercloud ~]# mistral action-execution-get-output $ACTION_ID
 
-Here is and example, we can check  the exection-list
+Here is and example, we can check  the execution-list
 
  [root@undercloud mistral]#  mistral execution-list 
 +------------------------------+------------------------------+------------------------------+------------------------+------------------------------+---------+------------------------------+---------------------+---------------------+
@@ -604,7 +604,7 @@ With workflow list, we can check all the workflows for a workbook
  tripleo.baremetal.v1.configure                            
  tripleo.baremetal.v1.introspect 
 
-We can then use the mistral workflow-get command to se the input parameters needed by the workflow, we are going to use the tripleo.baremetal.v1.provide_manageable_nodes , this simply list ironic nodes in manageable state
+We can then use the mistral workflow-get command to list the input parameters needed by the workflow, we are going to use the tripleo.baremetal.v1.provide_manageable_nodes , this simply list ironic nodes in manageable state
 
  [root@undercloud mistral]# mistral workflow-get tripleo.baremetal.v1.provide_manageable_nodes
 +------------+-----------------------------------------------+
@@ -851,7 +851,7 @@ We can still try and get more info from the resources in the last stack:
 | updated_time           | 2017-06-12T13:34:54Z                                                                                                                                                                                               |
 
 
-We can also use the deploy show to get output of the failed command, here we can see as input valus the configuration of the br-ex bridge with nic1
+We can also use the deploy show to get output of the failed command, here we can see as input values the configuration of the br-ex bridge with nic1
 
  [stack@undercloud ~]$ heat resource-list -n5 overcloud | grep SoftwareDeployment | grep CREATE_FAILED
 WARNING (shell) "heat resource-list" is deprecated, please use "openstack stack resource list" instead
@@ -1479,7 +1479,7 @@ I created another filed called config.json and remvoved the eth3 configuration a
 [2017/06/13 03:37:55 PM] [INFO] running ifup on interface: vlan100
 
 
-After checking the controller nic-config templates, there was and identation error in the controller.yml file, with the vlan line in eth3 configuration, once the files where modified and the stack rerun the installation continued ok.
+After checking the controller nic-config templates, there was and indentation error in the controller.yml file, with the vlan line in eth3 configuration, once the files where modified and the stack rerun the installation continued ok.
 
 
 *Checking info in /var/lib/heat-config*
@@ -1542,7 +1542,7 @@ metadata_url = http://10.0.0.10:8080/v1/AUTH_e6128b61cf7a4169a8f61cdf41a27344/ov
 
 *os-refresh-config*
 
-os-collet-config calls another tool call os-refresh-config, among them you can see os-net-config, os-refresh-config doesn't have a way to signal errors to heat, thats why failures like the ones in the network config don't get reported back to heat, and you will have to wait for a timeout
+os-collet-config calls another tool call os-refresh-config, among them you can see os-net-config, os-refresh-config doesn't have a way to signal errors to heat, that's why failures like the ones in the network config don't get reported back to heat, and you will have to wait for a timeout
 
 The important steps that os-refresh-config take are as follows:
 
@@ -1565,13 +1565,13 @@ total 32
 -rwxr-xr-x. 1 root root 1387 May  4 12:13 51-hosts
 -rwxr-xr-x. 1 root root 6575 Sep  8  2016 55-heat-config
 
-If needed you can run the scripts by hand to get the output on screen for debugging purpouses.
+If needed you can run the scripts by hand to get the output on screen for debugging purposes.
 Heat seeds the SoftwareDeployment to the nodes in the form of metadata, and relies on os-collect-config to download it, and os-refresh-config to apply it.
 
 
 *Checking puppet in the overcloud nodes*
 
-The hieradata files are populated from metadata in heat by the 40-hiera-datafiles script that is run by os-refresh-config, it dumps thehieradata info in /etc/puppet/hieradata, it can be very usefull to check variable data in this dir, so for example we are wondering were this ip came from
+The hieradata files are populated from metadata in heat by the 40-hiera-datafiles script that is run by os-refresh-config, it dumps thehieradata info in /etc/puppet/hieradata, it can be very useful to check variable data in this dir, so for example we are wondering were this ip came from
 
  [root@ctrl01 hieradata]# pcs status | grep 192.168.2.190
 ip-192.168.2.190       (ocf::heartbeat:IPaddr2):       Started ctrl01`
@@ -1649,7 +1649,7 @@ With that you have removed your overcloud if you need to go further and delete t
 done
 
 
-*ironic nde-list shows Instance UUID even after deleting the stack*
+*ironic node-list shows Instance UUID even after deleting the stack*
 
  [stack@instack ~]$ heat stack-list
 +----+------------+--------------+---------------+--------------+
