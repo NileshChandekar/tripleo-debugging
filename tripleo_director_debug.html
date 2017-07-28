@@ -722,7 +722,7 @@ b.conum * { color: inherit !important; }
 <ul class="sectlevel2">
 <li><a href="#_undercloud_install_recommendations">Undercloud install Recommendations</a></li>
 <li><a href="#_undercloud_install_debug">Undercloud install Debug</a></li>
-<li><a href="#_enrolling_overcloud">Enrolling overcloud</a></li>
+<li><a href="#_enrolling_overcloud_nodes">Enrolling overcloud Nodes</a></li>
 </ul>
 </li>
 <li><a href="#_introspection">Introspection</a>
@@ -776,9 +776,9 @@ b.conum * { color: inherit !important; }
 <div class="paragraph">
 <p><strong>undercloud.conf options</strong></p>
 </div>
-<div class="listingblock">
+<div class="literalblock">
 <div class="content">
-<pre>undercloud_debug = false  --&gt;  only enable debug if needed
+<pre> undercloud_debug = false  --&gt;  only enable debug if needed
 enable_telemetry = false  --&gt;  disable telemetry if its not needed
 automated_clean = true    --&gt; (is osp11 as clean_nodes=true) runs wipefs --force --all before making node available
 enable_tempest = true     --&gt; if you want to certifie your overcloud after deploy
@@ -812,9 +812,9 @@ __EOF__</pre>
 <div class="paragraph">
 <p>Keystone worker counts: increase the worker count to available cpus/2 if you have enough ram</p>
 </div>
-<div class="listingblock">
+<div class="literalblock">
 <div class="content">
-<pre>[root@undercloud ~]# cat /etc/httpd/conf.d/10-keystone_wsgi_admin.conf | grep processes
+<pre> [root@undercloud ~]# cat /etc/httpd/conf.d/10-keystone_wsgi_admin.conf | grep processes
   WSGIDaemonProcess keystone_admin display-name=keystone-admin group=keystone processes=4 threads=2 user=keystone
 [root@undercloud ~]# cat /etc/httpd/conf.d/10-keystone_wsgi_main.conf  | grep processes
   WSGIDaemonProcess keystone_main display-name=keystone-main group=keystone processes=4 threads=2 user=keystone</pre>
@@ -823,9 +823,9 @@ __EOF__</pre>
 <div class="paragraph">
 <p>Heat RPC response timeout, increase to 600 to be on the safe side</p>
 </div>
-<div class="listingblock">
+<div class="literalblock">
 <div class="content">
-<pre>[root@undercloud ~]# cat /etc/heat/heat.conf | grep ^rpc_response_timeout
+<pre> [root@undercloud ~]# cat /etc/heat/heat.conf | grep ^rpc_response_timeout
 rpc_response_timeout = 600</pre>
 </div>
 </div>
@@ -837,7 +837,7 @@ rpc_response_timeout = 600</pre>
 </div>
 </div>
 <div class="sect2">
-<h3 id="_enrolling_overcloud">Enrolling overcloud</h3>
+<h3 id="_enrolling_overcloud_nodes">Enrolling overcloud Nodes</h3>
 <div class="paragraph">
 <p>When enrolling overcloud nodes with the import command, the ironic driver tests the connectivity with the Ilo/drac</p>
 </div>
@@ -908,9 +908,9 @@ This command is deprecated. Instead, use 'openstack baremetal node list'.
 <div class="paragraph">
 <p><strong>Logs</strong></p>
 </div>
-<div class="listingblock">
+<div class="literalblock">
 <div class="content">
-<pre>[root@undercloud ironic]# ls -l /var/log/ironic-inspector/*.log
+<pre> [root@undercloud ironic]# ls -l /var/log/ironic-inspector/*.log
 -rw-r--r--. 1 ironic-inspector ironic-inspector 32080 Jun  1 10:37 /var/log/ironic-inspector/ironic-inspector.log
 [root@undercloud ironic]# ls -l /var/log/ironic/*.log
 -rw-r--r--. 1 ironic ironic 2238295 Jun  3 08:26 /var/log/ironic/ironic-api.log
@@ -930,9 +930,9 @@ Jun 07 09:07:57 undercloud.localdomain ironic-inspector[1236]: 2017-06-07 09:07:
 <div class="paragraph">
 <p>If you want to inspect the ram disk run even if it didn&#8217;t fail we have to modify the always_store_ramdisk_logs option in  /etc/ironic-inspector/inspector.conf and restart the service</p>
 </div>
-<div class="listingblock">
+<div class="literalblock">
 <div class="content">
-<pre>[root@undercloud ~]# sed -ibck 's/^.*always_store_ramdisk_logs.*$/always_store_ramdisk_logs = true/g' /etc/ironic-inspector/inspector.conf
+<pre> [root@undercloud ~]# sed -ibck 's/^.*always_store_ramdisk_logs.*$/always_store_ramdisk_logs = true/g' /etc/ironic-inspector/inspector.conf
 [root@undercloud ~]#  openstack baremetal introspection start ba4db2bf-c327-4fca-a37e-83cc17c1561a
 [root@undercloud ~]# systemctl restart openstack-ironic-inspector.service
 [root@undercloud ~]# ls -l /var/log/ironic-inspector/ramdisk/
@@ -946,9 +946,9 @@ total 20
 <div class="paragraph">
 <p>Use ssl to create a hash for a password</p>
 </div>
-<div class="listingblock">
+<div class="literalblock">
 <div class="content">
-<pre>[root@undercloud ~]# openssl passwd -1
+<pre> [root@undercloud ~]# openssl passwd -1
 Password:
 Verifying - Password:
 $1$ZqPeffYv$CvGO/oS8b28YRdMMS2WCF1</pre>
@@ -957,11 +957,10 @@ $1$ZqPeffYv$CvGO/oS8b28YRdMMS2WCF1</pre>
 <div class="paragraph">
 <p>Edit /httpboot/inspector.ipxe manually. Find the line starting with “kernel” and append rootpwd=”HASH” to it, also disable selinux with the selinux=0 option</p>
 </div>
-<div class="listingblock">
+<div class="literalblock">
 <div class="content">
 <pre>[root@undercloud ~]# cat /httpboot/inspector.ipxe
 #!ipxe
-
 :retry_boot
 imgfree
 kernel --timeout 60000 http://10.0.0.10:8088/agent.kernel ipa-inspection-callback-url=http://10.0.0.10:5050/v1/continue ipa-inspection-collectors=default,extra-hardware,logs systemd.journald.forward_to_console=yes BOOTIF=${mac} ipa-inspection-dhcp-all-interfaces=1 ipa-collect-lldp=1 initrd=agent.ramdisk rootpwd="$1$UQ/HlKRP$pXaAJKgSS7z7SPqOTH0FV/" selinux=0 || goto retry_boot
@@ -985,7 +984,7 @@ boot</pre>
 </div>
 <div class="literalblock">
 <div class="content">
-<pre> [root@undercloud httpboot]# cp /httpboot/agent.ramdisk /root/agent.ramdisk
+<pre>[root@undercloud httpboot]# cp /httpboot/agent.ramdisk /root/agent.ramdisk
 [root@undercloud ~]# mkdir agent.ramdisk.dir
 [root@undercloud ~]# cd agent.ramdisk.dir
 [root@undercloud agent.ramdisk.dir]# gzip -dc ../agent.ramdisk | cpio --extract
@@ -999,7 +998,7 @@ bin  boot  dev  etc  home  init  lib  lib64  lost+found  media  mnt  opt  proc  
 </div>
 <div class="literalblock">
 <div class="content">
-<pre> [root@undercloud httpboot]# find . | cpio -oc | gzip -c -9&gt;| ~/agent.ramdisk.root-test
+<pre>[root@undercloud httpboot]# find . | cpio -oc | gzip -c -9&gt;| ~/agent.ramdisk.root-test
 [root@undercloud httpboot]# cp ~/agent.ramdisk.root-test /httpboot/agent.ramdisk</pre>
 </div>
 </div>
@@ -2731,9 +2730,11 @@ Heat seeds the SoftwareDeployment to the nodes in the form of metadata, and reli
 <div class="paragraph">
 <p>The hieradata files are populated from metadata in heat by the 40-hiera-datafiles script that is run by os-refresh-config, it dumps thehieradata info in /etc/puppet/hieradata, it can be very usefull to check variable data in this dir, so for example we are wondering were this ip came from</p>
 </div>
-<div class="paragraph">
-<p><code>[root@ctrl01 hieradata]# pcs status | grep 192.168.2.190
-ip-192.168.2.190       (ocf::heartbeat:IPaddr2):       Started ctrl01</code></p>
+<div class="literalblock">
+<div class="content">
+<pre> [root@ctrl01 hieradata]# pcs status | grep 192.168.2.190
+ip-192.168.2.190       (ocf::heartbeat:IPaddr2):       Started ctrl01`</pre>
+</div>
 </div>
 <div class="paragraph">
 <p>We can check in the hieradata files</p>
@@ -2835,11 +2836,13 @@ Deleting plan overcloud...</pre>
 <div class="paragraph">
 <p>With that you have removed your overcloud if you need to go further and delete the ironic nodes you can do</p>
 </div>
-<div class="paragraph">
-<p>for uuid in $(ironic node-list | grep -v UUID | awk -F'|' '{ print $2}' | xargs`) ; do
+<div class="literalblock">
+<div class="content">
+<pre> for uuid in $(ironic node-list | grep -v UUID | awk -F'|' '{ print $2}' | xargs`) ; do
     ironic node-set-maintenance $uuid false
     ironic node-delete $uuid
-done</p>
+done</pre>
+</div>
 </div>
 <div class="paragraph">
 <p><strong>ironic nde-list shows Instance UUID even after deleting the stack</strong></p>
@@ -2883,7 +2886,7 @@ done</p>
 </div>
 <div id="footer">
 <div id="footer-text">
-Last updated 2017-07-15 14:29:42 CEST
+Last updated 2017-07-28 12:42:14 CEST
 </div>
 </div>
 </body>

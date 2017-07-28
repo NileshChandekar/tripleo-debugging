@@ -142,12 +142,12 @@ Edit /httpboot/inspector.ipxe manually. Find the line starting with “kernel”
 
 
  [root@undercloud ~]# cat /httpboot/inspector.ipxe 
-#!ipxe
-:retry_boot
-imgfree
-kernel --timeout 60000 http://10.0.0.10:8088/agent.kernel ipa-inspection-callback-url=http://10.0.0.10:5050/v1/continue ipa-inspection-collectors=default,extra-hardware,logs systemd.journald.forward_to_console=yes BOOTIF=${mac} ipa-inspection-dhcp-all-interfaces=1 ipa-collect-lldp=1 initrd=agent.ramdisk rootpwd="$1$UQ/HlKRP$pXaAJKgSS7z7SPqOTH0FV/" selinux=0 || goto retry_boot
-initrd --timeout 60000 http://10.0.0.10:8088/agent.ramdisk || goto retry_boot
-boot
+ #!ipxe
+ :retry_boot
+ imgfree
+ kernel --timeout 60000 http://10.0.0.10:8088/agent.kernel ipa-inspection-callback-url=http://10.0.0.10:5050/v1/continue ipa-inspection-collectors=default,extra-hardware,logs systemd.journald.forward_to_console=yes BOOTIF=${mac} ipa-inspection-dhcp-all-interfaces=1 ipa-collect-lldp=1 initrd=agent.ramdisk rootpwd="$1$UQ/HlKRP$pXaAJKgSS7z7SPqOTH0FV/" selinux=0 || goto retry_boot
+ initrd --timeout 60000 http://10.0.0.10:8088/agent.ramdisk || goto retry_boot
+ boot
 
 
 We can see the options we added to the cmdline being lodaded on the next ram disk run
@@ -159,17 +159,17 @@ We can see the options we added to the cmdline being lodaded on the next ram dis
 If you need to modify the ramdisk image to fix some issue you can follow these steps:
 
  [root@undercloud httpboot]# cp /httpboot/agent.ramdisk /root/agent.ramdisk
-[root@undercloud ~]# mkdir agent.ramdisk.dir
-[root@undercloud ~]# cd agent.ramdisk.dir
-[root@undercloud agent.ramdisk.dir]# gzip -dc ../agent.ramdisk | cpio --extract
-1872427 blocks
-[root@undercloud agent.ramdisk.dir]# ls
-bin  boot  dev  etc  home  init  lib  lib64  lost+found  media  mnt  opt  proc  root  run  sbin  srv  sys  tmp  usr  var
+ [root@undercloud ~]# mkdir agent.ramdisk.dir
+ [root@undercloud ~]# cd agent.ramdisk.dir
+ [root@undercloud agent.ramdisk.dir]# gzip -dc ../agent.ramdisk | cpio --extract
+ 1872427 blocks
+ [root@undercloud agent.ramdisk.dir]# ls
+ bin  boot  dev  etc  home  init  lib  lib64  lost+found  media  mnt  opt  proc  root  run  sbin  srv  sys  tmp  usr  var
 
 After modifiying the image, we zip it again and move it into the httpboot dir
 
  [root@undercloud httpboot]# find . | cpio -oc | gzip -c -9>| ~/agent.ramdisk.root-test
-[root@undercloud httpboot]# cp ~/agent.ramdisk.root-test /httpboot/agent.ramdisk
+ [root@undercloud httpboot]# cp ~/agent.ramdisk.root-test /httpboot/agent.ramdisk
 
 Check selinux permissions are ok:
 
