@@ -528,6 +528,121 @@ The problem is that currently cloud-init overrides the CloudDomain info, so unti
 
  https://bugs.launchpad.net/tripleo/+bug/1581472
 
+*NTP Configuration*
+To configure NTP on the overcloud, all that is required is an environment file with an ‘NtpServers’ parameter. When this variable is defined, the overcloud will take the necessary steps to configure the nodes as NTP clients. An example definition follows:
+
+ parameter_defaults:
+  NtpServers:
+  - tick.corp.example.com
+  - tock.corp.example.com
+
+*Custom Hostnames*
+Custom hostnames can be configured by including an environment file that specifies a HostnameMap:
+
+ parameter_defaults:
+  HostnameMap:
+    overcloud-controller-0: ctrl0-mumbai
+    overcloud-controller-1: ctrl1-mumbai
+    overcloud-controller-2: ctrl2-mumbai
+    overcloud-compute-0: cmpt0-mumbai
+    overcloud-compute-1: cmpt1-mumbai
+...etc…
+
+Note that if you use a custom stack name when deploying the overcloud, e.g.:  
+
+$ openstack overcloud deploy --stack mycloud --templates ….
+
+...then replace ‘overcloud’ with the stack name in the HostnameMap.
+
+ parameter_defaults:
+  HostnameMap:
+    mycloud-controller-0: c17u11b01-ctrl0
+    mycloud-controller-1: c17u11b02-ctrl1
+    mycloud-controller-2: c17u11b03-ctrl2
+...etc…
+
+*Red Hat Satellite Registration*
+Add credentials to environment-rhel-registration.yaml to include in the deployment:
+
+ parameter_defaults:
+  rhel_reg_activation_key: "osp10-activation-key"
+  rhel_reg_auto_attach: ""
+  rhel_reg_base_url: ""
+  rhel_reg_environment: ""
+  rhel_reg_force: ""
+  rhel_reg_machine_name: ""
+  rhel_reg_org: "Default_Organization"
+  rhel_reg_password: ""
+  rhel_reg_pool_id: ""
+  rhel_reg_release: ""
+  rhel_reg_repos: ""
+  rhel_reg_sat_url: "http://satellite.example.com"
+  rhel_reg_server_url: ""
+  rhel_reg_service_level: ""
+  rhel_reg_user: ""
+  rhel_reg_type: ""
+  rhel_reg_method: "satellite"
+  rhel_reg_sat_repo: "rhel-7-server-satellite-tools-6.2-rpms"
+
+Further details can be found here: https://access.redhat.com/documentation/en-us/red_hat_openstack_platform/10/html/advanced_overcloud_customization/sect-registering_the_overcloud
+
+*SSL Configuration*
+OpenStack endpoints can be secured with SSL, both on the undercloud and the overcloud. Detailed instructions can be found on the customer portal.
+Undercloud:
+https://access.redhat.com/documentation/en-us/red_hat_openstack_platform/10/html/director_installation_and_usage/appe-ssltls_certificate_configuration
+Overcloud:
+https://access.redhat.com/documentation/en-us/red_hat_openstack_platform/10/html/advanced_overcloud_customization/sect-enabling_ssltls_on_the_overcloud
+
+*Running Additional Scripts*
+Additional custom scripts can be executed on all or specific nodes, at various points in an overcloud deployment.
+
+Hooks exist to run scripts on all nodes when:
+1) The node is first booted (OS::TripleO::NodeUserData)
+2) A node has booted but before puppet is ran to configure the overcloud (OS::TripleO::NodeExtraConfig)
+3) puppet has run on a node (OS::TripleO::NodeExtraConfigPost)
+
+The above TripleO resources will run on all nodes in the overcloud. 
+In cases 2 and 3, role specific configuration can be applied via the OS::TripleO::Tasks::[ROLE]PreConfig and OS::TripleO::Tasks::[ROLE]PostConfig hooks, where ROLE is the role that the node performs 
+e.g. OS::TripleO::Tasks::ControllerPreConfig and OS::TripleO::Tasks::ControllerPostConfig. 
+
+More details, along with examples, can be found here: https://access.redhat.com/documentation/en-us/red_hat_openstack_platform/10/html/advanced_overcloud_customization/configuration_hooks
+
+*Static Routes*
+Static routes on the overcloud nodes can be configured in the NIC config templates. A list of routes can be supplied to any NIC declaration. The following snippet creates 3 static routes on the provisioning interface, one for the EC2 metadata service, a default route via the Control plane network, and a 3rd with a hard coded destination netmask and gateway:
+
+ routes:
+                -
+                  ip_netmask: 169.254.169.254/32
+                  next_hop: {get_param: EC2MetadataIp}
+                -
+                  default: true
+                  next_hop: {get_param: ControlPlaneDefaultRoute}
+                -
+                  ip_netmask: 10.42.42.0/24
+                  next_hop: 10.42.42.254
+
+*MTU*
+When creating the required overcloud NIC configuration files, an MTU can be explicitly specified to override the default value. The following is an example of setting the MTU on the external interface:
+
+           -
+              type: ovs_bridge
+              name: {get_input: bridge_name}
+              mtu: 9000
+              dns_servers: {get_param: DnsServers}
+              addresses:
+                -
+                  ip_netmask: {get_param: ExternalIpSubnet}
+              routes:
+                -
+                  ip_netmask: 0.0.0.0/0
+                  next_hop: {get_param: ExternalInterfaceDefaultRoute}
+              members:
+                -
+                  type: interface
+                  name: em4
+                  primary: true
+
+
 
 === Mistral Plans Debug
 
